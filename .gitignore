@@ -1,0 +1,16 @@
+# IDEs and editors
+.idea/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local agent memory files
+CLAUDE.local.md
