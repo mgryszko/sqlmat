@@ -17,3 +17,55 @@ class DuckDBAdapter(Adapter):
         full_table_name = f"{schema}.{table}"
         drop_sql = f"drop table if exists {full_table_name}"
         self.conn.execute(drop_sql)
+
+    def table_exists(self, schema: str, table: str) -> bool:
+        result = self.conn.execute(
+            """
+            select count(*)
+            from system.information_schema.tables
+            where lower(table_schema) = lower(?)
+              and lower(table_name) = lower(?)
+            """,
+            [schema, table],
+        ).fetchone()
+        return result[0] > 0
+
+    def get_columns(self, schema: str, table: str) -> list[str]:
+        result = self.conn.execute(
+            """
+            select column_name
+            from system.information_schema.columns
+            where lower(table_schema) = lower(?)
+              and lower(table_name) = lower(?)
+            order by ordinal_position
+            """,
+            [schema, table],
+        ).fetchall()
+        return [row[0] for row in result]
+
+    def delete_with_using(self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str]) -> None:
+        full_target = f"{target_schema}.{target_table}"
+        join_conditions = " and ".join([f"{temp_table}.{key} = target.{key}" for key in unique_keys])
+        delete_sql = f"""
+            delete from {full_target} as target
+            using {temp_table}
+            where {join_conditions}
+        """
+        self.conn.execute(delete_sql)
+
+    def delete_with_in(self, target_schema: str, target_table: str, temp_table: str, unique_key: str) -> None:
+        full_target = f"{target_schema}.{target_table}"
+        delete_sql = f"""
+            delete from {full_target}
+            where ({unique_key}) in (select ({unique_key}) from {temp_table})
+        """
+        self.conn.execute(delete_sql)
+
+    def insert_from_select(self, target_schema: str, target_table: str, columns: list[str], temp_table: str) -> None:
+        full_target = f"{target_schema}.{target_table}"
+        columns_str = ", ".join(columns)
+        insert_sql = f"""
+            insert into {full_target} ({columns_str})
+            select {columns_str} from {temp_table}
+        """
+        self.conn.execute(insert_sql)
