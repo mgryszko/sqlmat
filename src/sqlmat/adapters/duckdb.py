@@ -43,21 +43,37 @@ class DuckDBAdapter(Adapter):
         ).fetchall()
         return [row[0] for row in result]
 
-    def delete_with_using(self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str]) -> None:
+    def delete_with_using(
+        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+    ) -> None:
         full_target = f"{target_schema}.{target_table}"
         join_conditions = " and ".join([f"{temp_table}.{key} = target.{key}" for key in unique_keys])
+
+        where_clause = join_conditions
+        if predicates:
+            predicate_conditions = " and ".join(predicates)
+            where_clause = f"{join_conditions} and {predicate_conditions}"
+
         delete_sql = f"""
             delete from {full_target} as target
             using {temp_table}
-            where {join_conditions}
+            where {where_clause}
         """
         self.conn.execute(delete_sql)
 
-    def delete_with_in(self, target_schema: str, target_table: str, temp_table: str, unique_key: str) -> None:
+    def delete_with_in(
+        self, target_schema: str, target_table: str, temp_table: str, unique_key: str, predicates: list[str] | None = None
+    ) -> None:
         full_target = f"{target_schema}.{target_table}"
+
+        where_clause = f"(target.{unique_key}) in (select ({unique_key}) from {temp_table})"
+        if predicates:
+            predicate_conditions = " and ".join(predicates)
+            where_clause = f"{where_clause} and {predicate_conditions}"
+
         delete_sql = f"""
-            delete from {full_target}
-            where ({unique_key}) in (select ({unique_key}) from {temp_table})
+            delete from {full_target} as target
+            where {where_clause}
         """
         self.conn.execute(delete_sql)
 

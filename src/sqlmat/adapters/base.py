@@ -23,11 +23,15 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
-    def delete_with_using(self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str]) -> None:
+    def delete_with_using(
+        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+    ) -> None:
         pass
 
     @abstractmethod
-    def delete_with_in(self, target_schema: str, target_table: str, temp_table: str, unique_key: str) -> None:
+    def delete_with_in(
+        self, target_schema: str, target_table: str, temp_table: str, unique_key: str, predicates: list[str] | None = None
+    ) -> None:
         pass
 
     @abstractmethod

@@ -17,13 +17,14 @@ class Executor:
         sql = transformation.sql
         materialization = transformation.materialization
         unique_key = transformation.unique_key
+        incremental_predicates = transformation.incremental_predicates
 
         full_table_name = transformation.get_full_table_name()
         context = self.template_engine.create_context(params, full_table_name)
         rendered_sql = self.template_engine.render(sql, context)
 
         if materialization == "delete_insert":
-            self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key)
+            self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
         else:
             self._run_full_refresh(target_schema, target_table, rendered_sql)
 
@@ -37,6 +38,7 @@ class Executor:
         target_table: str,
         rendered_sql: str,
         unique_key: str | list[str] | None,
+        incremental_predicates: str | list[str] | None = None,
     ) -> None:
         if unique_key is None:
             raise ValueError("unique_key is required for delete_insert materialization")
@@ -53,11 +55,20 @@ class Executor:
 
         columns = self.adapter.get_columns(target_schema, target_table)
 
+        predicates = self._normalize_predicates(incremental_predicates)
+
         if isinstance(unique_key, list):
-            self.adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key)
+            self.adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key, predicates)
         else:
-            self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key)
+            self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
 
         self.adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
 
         self.adapter.drop_table(target_schema, temp_table)
+
+    def _normalize_predicates(self, predicates: str | list[str] | None) -> list[str] | None:
+        if predicates is None:
+            return None
+        if isinstance(predicates, str):
+            return [predicates]
+        return predicates
