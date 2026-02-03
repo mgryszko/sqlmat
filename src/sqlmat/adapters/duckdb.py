@@ -1,4 +1,4 @@
-from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
+from sqlmat.adapters.base import SOURCE_TABLE_ALIAS, TARGET_TABLE_ALIAS, Adapter
 
 
 class DuckDBAdapter(Adapter):
@@ -85,3 +85,23 @@ class DuckDBAdapter(Adapter):
             select {columns_str} from {temp_table}
         """
         self.conn.execute(insert_sql)
+
+    def merge(
+        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+    ) -> None:
+        full_target = f"{target_schema}.{target_table}"
+        join_conditions = " and ".join([f"{SOURCE_TABLE_ALIAS}.{key} = {TARGET_TABLE_ALIAS}.{key}" for key in unique_keys])
+
+        on_clause = join_conditions
+        if predicates:
+            predicate_conditions = " and ".join(predicates)
+            on_clause = f"{join_conditions} and {predicate_conditions}"
+
+        merge_sql = f"""
+            merge into {full_target} as {TARGET_TABLE_ALIAS}
+            using {temp_table} as {SOURCE_TABLE_ALIAS}
+            on {on_clause}
+            when matched then update set *
+            when not matched then insert *
+        """
+        self.conn.execute(merge_sql)

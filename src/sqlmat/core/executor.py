@@ -25,6 +25,8 @@ class Executor:
 
         if materialization == "delete_insert":
             self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
+        elif materialization == "merge":
+            self._run_merge(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
         else:
             self._run_full_refresh(target_schema, target_table, rendered_sql)
 
@@ -63,6 +65,34 @@ class Executor:
             self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
 
         self.adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
+
+        self.adapter.drop_table(target_schema, temp_table)
+
+    def _run_merge(
+        self,
+        target_schema: str,
+        target_table: str,
+        rendered_sql: str,
+        unique_key: str | list[str] | None,
+        incremental_predicates: str | list[str] | None = None,
+    ) -> None:
+        if unique_key is None:
+            raise ValueError("unique_key is required for merge materialization")
+
+        temp_table = f"{target_table}_tmp"
+        temp_table_full = f"{target_schema}.{temp_table}"
+
+        self.adapter.drop_table(target_schema, temp_table)
+        self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
+
+        if not self.adapter.table_exists(target_schema, target_table):
+            self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+            return
+
+        predicates = self._normalize_predicates(incremental_predicates)
+        unique_keys = [unique_key] if isinstance(unique_key, str) else unique_key
+
+        self.adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
 
         self.adapter.drop_table(target_schema, temp_table)
 

@@ -5,7 +5,7 @@ class Transformation:
     target_schema: str
     target_table: str
     sql: str
-    materialization: Literal["full_refresh", "delete_insert"] = "full_refresh"
+    materialization: Literal["full_refresh", "delete_insert", "merge"] = "full_refresh"
     unique_key: str | list[str] | None = None
     incremental_predicates: str | list[str] | None = None
 

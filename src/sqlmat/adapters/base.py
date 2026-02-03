@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 TARGET_TABLE_ALIAS = "target"
+SOURCE_TABLE_ALIAS = "source"
 
 
 class Adapter(ABC):
@@ -38,4 +39,10 @@ class Adapter(ABC):
 
     @abstractmethod
     def insert_from_select(self, target_schema: str, target_table: str, columns: list[str], temp_table: str) -> None:
+        pass
+
+    @abstractmethod
+    def merge(
+        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+    ) -> None:
         pass
