@@ -1,4 +1,4 @@
-from sqlmat.adapters.base import Adapter
+from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
 
 
 class DuckDBAdapter(Adapter):
@@ -47,7 +47,7 @@ class DuckDBAdapter(Adapter):
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
-        join_conditions = " and ".join([f"{temp_table}.{key} = target.{key}" for key in unique_keys])
+        join_conditions = " and ".join([f"{temp_table}.{key} = {TARGET_TABLE_ALIAS}.{key}" for key in unique_keys])
 
         where_clause = join_conditions
         if predicates:
@@ -55,7 +55,7 @@ class DuckDBAdapter(Adapter):
             where_clause = f"{join_conditions} and {predicate_conditions}"
 
         delete_sql = f"""
-            delete from {full_target} as target
+            delete from {full_target} as {TARGET_TABLE_ALIAS}
             using {temp_table}
             where {where_clause}
         """
@@ -66,13 +66,13 @@ class DuckDBAdapter(Adapter):
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
 
-        where_clause = f"(target.{unique_key}) in (select ({unique_key}) from {temp_table})"
+        where_clause = f"({TARGET_TABLE_ALIAS}.{unique_key}) in (select ({unique_key}) from {temp_table})"
         if predicates:
             predicate_conditions = " and ".join(predicates)
             where_clause = f"{where_clause} and {predicate_conditions}"
 
         delete_sql = f"""
-            delete from {full_target} as target
+            delete from {full_target} as {TARGET_TABLE_ALIAS}
             where {where_clause}
         """
         self.conn.execute(delete_sql)

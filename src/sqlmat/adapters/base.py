@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+TARGET_TABLE_ALIAS = "target"
+
 
 class Adapter(ABC):
     @abstractmethod

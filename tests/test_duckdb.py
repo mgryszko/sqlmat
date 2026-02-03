@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 from sqlmat import Executor, Transformation
-from sqlmat.adapters import DuckDBAdapter
+from sqlmat.adapters import TARGET_TABLE_ALIAS, DuckDBAdapter
 
 
 @pytest.fixture
@@ -152,7 +152,7 @@ def test_delete_insert_with_incremental_predicates_single_string(adapter: DuckDB
         target_table = "daily_stats"
         materialization = "delete_insert"
         unique_key = "user_id"
-        incremental_predicates = "target.event_count > 15"
+        incremental_predicates = f"{TARGET_TABLE_ALIAS}.event_count > 15"
         sql = "select user_id, event_date, event_count from {{ source_schema }}.events"
 
     adapter.execute("create schema staging")
@@ -181,7 +181,7 @@ def test_delete_insert_with_incremental_predicates_list(adapter: DuckDBAdapter, 
         target_table = "daily_stats"
         materialization = "delete_insert"
         unique_key = ["user_id", "event_date"]
-        incremental_predicates = ["target.event_date >= '2024-01-02'", "target.event_count > 10"]
+        incremental_predicates = [f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"]
         sql = "select user_id, event_date, event_count from {{ source_schema }}.events"
 
     adapter.execute("create schema staging")
