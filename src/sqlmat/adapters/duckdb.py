@@ -8,16 +8,6 @@ class DuckDBAdapter(Adapter):
     def execute(self, sql: str) -> None:
         self.conn.execute(sql)
 
-    def create_table_as(self, schema: str, table: str, sql: str) -> None:
-        full_table_name = f"{schema}.{table}"
-        create_sql = f"create table {full_table_name} as {sql}"
-        self.conn.execute(create_sql)
-
-    def drop_table(self, schema: str, table: str) -> None:
-        full_table_name = f"{schema}.{table}"
-        drop_sql = f"drop table if exists {full_table_name}"
-        self.conn.execute(drop_sql)
-
     def table_exists(self, schema: str, table: str) -> bool:
         result = self.conn.execute(
             """
@@ -42,6 +32,16 @@ class DuckDBAdapter(Adapter):
             [schema, table],
         ).fetchall()
         return [row[0] for row in result]
+
+    def create_table_as(self, schema: str, table: str, sql: str) -> None:
+        full_table_name = f"{schema}.{table}"
+        create_sql = f"create table {full_table_name} as {sql}"
+        self.conn.execute(create_sql)
+
+    def drop_table(self, schema: str, table: str) -> None:
+        full_table_name = f"{schema}.{table}"
+        drop_sql = f"drop table if exists {full_table_name}"
+        self.conn.execute(drop_sql)
 
     def delete_with_using(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
@@ -105,3 +105,12 @@ class DuckDBAdapter(Adapter):
             when not matched then insert *
         """
         self.conn.execute(merge_sql)
+
+    def begin_transaction(self) -> None:
+        self.conn.execute("begin transaction")
+
+    def commit(self) -> None:
+        self.conn.execute("commit")
+
+    def rollback(self) -> None:
+        self.conn.execute("rollback")

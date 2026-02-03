@@ -415,3 +415,63 @@ def test_merge_without_unique_key_raises_error(adapter: DuckDBAdapter, executor:
 
     with pytest.raises(ValueError, match="unique_key is required for merge materialization"):
         executor.run(MergeTransform(), params={"source_schema": "staging"})
+
+
+def test_full_refresh_rollback_on_error(adapter: DuckDBAdapter, executor: Executor):
+    class FailingTransform(Transformation):
+        target_schema = "analytics"
+        target_table = "daily_stats"
+        sql = "select * from nonexistent_table"
+
+    adapter.execute("create schema analytics")
+    adapter.execute("create table analytics.daily_stats (id integer, name varchar)")
+    adapter.execute("insert into analytics.daily_stats values (1, 'original')")
+
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists("analytics", "daily_stats")
+    cursor = adapter.conn.execute("select * from analytics.daily_stats")
+    assert cursor.fetchall() == [(1, "original")]
+
+
+def test_delete_insert_rollback_on_error(adapter: DuckDBAdapter, executor: Executor):
+    class FailingTransform(Transformation):
+        target_schema = "analytics"
+        target_table = "daily_stats"
+        materialization = "delete_insert"
+        unique_key = "id"
+        sql = "select * from nonexistent_table"
+
+    adapter.execute("create schema analytics")
+    adapter.execute("create table analytics.daily_stats (id integer, name varchar)")
+    adapter.execute("insert into analytics.daily_stats values (1, 'original')")
+
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists("analytics", "daily_stats")
+    cursor = adapter.conn.execute("select * from analytics.daily_stats")
+    assert cursor.fetchall() == [(1, "original")]
+    assert not adapter.table_exists("analytics", "daily_stats_tmp")
+
+
+def test_merge_rollback_on_error(adapter: DuckDBAdapter, executor: Executor):
+    class FailingTransform(Transformation):
+        target_schema = "analytics"
+        target_table = "daily_stats"
+        materialization = "merge"
+        unique_key = "id"
+        sql = "select * from nonexistent_table"
+
+    adapter.execute("create schema analytics")
+    adapter.execute("create table analytics.daily_stats (id integer, name varchar)")
+    adapter.execute("insert into analytics.daily_stats values (1, 'original')")
+
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists("analytics", "daily_stats")
+    cursor = adapter.conn.execute("select * from analytics.daily_stats")
+    assert cursor.fetchall() == [(1, "original")]
+    assert not adapter.table_exists("analytics", "daily_stats_tmp")

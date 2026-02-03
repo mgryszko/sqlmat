@@ -10,19 +10,19 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
-    def create_table_as(self, schema: str, table: str, sql: str) -> None:
-        pass
-
-    @abstractmethod
-    def drop_table(self, schema: str, table: str) -> None:
-        pass
-
-    @abstractmethod
     def table_exists(self, schema: str, table: str) -> bool:
         pass
 
     @abstractmethod
     def get_columns(self, schema: str, table: str) -> list[str]:
+        pass
+
+    @abstractmethod
+    def create_table_as(self, schema: str, table: str, sql: str) -> None:
+        pass
+
+    @abstractmethod
+    def drop_table(self, schema: str, table: str) -> None:
         pass
 
     @abstractmethod
@@ -46,3 +46,16 @@ class Adapter(ABC):
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         pass
+
+    @abstractmethod
+    def begin_transaction(self) -> None:
+        pass
+
+    @abstractmethod
+    def commit(self) -> None:
+        pass
+
+    @abstractmethod
+    def rollback(self) -> None:
+        pass
+

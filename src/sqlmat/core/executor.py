@@ -31,8 +31,14 @@ class Executor:
             self._run_full_refresh(target_schema, target_table, rendered_sql)
 
     def _run_full_refresh(self, target_schema: str, target_table: str, rendered_sql: str) -> None:
-        self.adapter.drop_table(target_schema, target_table)
-        self.adapter.create_table_as(target_schema, target_table, rendered_sql)
+        self.adapter.begin_transaction()
+        try:
+            self.adapter.drop_table(target_schema, target_table)
+            self.adapter.create_table_as(target_schema, target_table, rendered_sql)
+            self.adapter.commit()
+        except Exception:
+            self.adapter.rollback()
+            raise
 
     def _run_delete_insert(
         self,
@@ -48,25 +54,32 @@ class Executor:
         temp_table = f"{target_table}_tmp"
         temp_table_full = f"{target_schema}.{temp_table}"
 
-        self.adapter.drop_table(target_schema, temp_table)
-        self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
+        self.adapter.begin_transaction()
+        try:
+            self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
-        if not self.adapter.table_exists(target_schema, target_table):
-            self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
-            return
+            if not self.adapter.table_exists(target_schema, target_table):
+                self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self.adapter.commit()
+                return
 
-        columns = self.adapter.get_columns(target_schema, target_table)
+            columns = self.adapter.get_columns(target_schema, target_table)
 
-        predicates = self._normalize_predicates(incremental_predicates)
+            predicates = self._normalize_predicates(incremental_predicates)
 
-        if isinstance(unique_key, list):
-            self.adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key, predicates)
-        else:
-            self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
+            if isinstance(unique_key, list):
+                self.adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key, predicates)
+            else:
+                self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
 
-        self.adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
+            self.adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
 
-        self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.commit()
+        except Exception:
+            self.adapter.rollback()
+            raise
 
     def _run_merge(
         self,
@@ -82,19 +95,26 @@ class Executor:
         temp_table = f"{target_table}_tmp"
         temp_table_full = f"{target_schema}.{temp_table}"
 
-        self.adapter.drop_table(target_schema, temp_table)
-        self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
+        self.adapter.begin_transaction()
+        try:
+            self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
-        if not self.adapter.table_exists(target_schema, target_table):
-            self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
-            return
+            if not self.adapter.table_exists(target_schema, target_table):
+                self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self.adapter.commit()
+                return
 
-        predicates = self._normalize_predicates(incremental_predicates)
-        unique_keys = [unique_key] if isinstance(unique_key, str) else unique_key
+            predicates = self._normalize_predicates(incremental_predicates)
+            unique_keys = [unique_key] if isinstance(unique_key, str) else unique_key
 
-        self.adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
+            self.adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
 
-        self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.drop_table(target_schema, temp_table)
+            self.adapter.commit()
+        except Exception:
+            self.adapter.rollback()
+            raise
 
     def _normalize_predicates(self, predicates: str | list[str] | None) -> list[str] | None:
         if predicates is None:
