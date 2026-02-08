@@ -104,9 +104,7 @@ def test_create_schema_with_prefix(conn):
 
     registry.teardown()
 
-    assert conn.cursor().execute(
-        f"select schema_name from information_schema.schemata where schema_name = '{schema}'"
-    ).fetchall() == []
+    assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 
 
 def test_create_schema_without_prefix(conn):
@@ -118,9 +116,7 @@ def test_create_schema_without_prefix(conn):
 
     registry.teardown()
 
-    assert conn.cursor().execute(
-        f"select schema_name from information_schema.schemata where schema_name = '{schema}'"
-    ).fetchall() == []
+    assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 
 
 def test_assert_table_equals_without_order_by(conn, registry):
@@ -133,9 +129,7 @@ def test_assert_table_equals_without_order_by(conn, registry):
 
 
 def test_assert_table_equals_subset_of_columns(conn, registry):
-    table = Table(
-        conn, "main", "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]
-    ).create(registry)
+    table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]).create(registry)
     table.insert([(1, "Alice", 30), (2, "Bob", 25)])
 
     table.assert_table_equals(

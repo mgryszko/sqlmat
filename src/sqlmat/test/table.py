@@ -14,6 +14,14 @@ class Table:
         self._columns = columns
 
     @property
+    def schema(self) -> str:
+        return self._schema
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
     def qualified_name(self) -> str:
         return f"{self._schema}.{self._name}"
 
