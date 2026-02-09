@@ -58,4 +58,3 @@ class Adapter(ABC):
     @abstractmethod
     def rollback(self) -> None:
         pass
-

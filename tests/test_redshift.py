@@ -1,0 +1,504 @@
+import datetime
+import os
+from collections.abc import Generator
+
+import pytest
+import redshift_connector
+from dotenv import load_dotenv
+
+from sqlmat import Executor, Transformation
+from sqlmat.adapters import TARGET_TABLE_ALIAS, RedshiftAdapter
+from sqlmat.test import SchemaRegistry, Table
+
+load_dotenv()
+
+REDSHIFT_HOST = os.environ.get("REDSHIFT_HOST")
+REDSHIFT_PORT = int(os.environ.get("REDSHIFT_PORT", "5439"))
+REDSHIFT_DATABASE = os.environ.get("REDSHIFT_DATABASE")
+REDSHIFT_USER = os.environ.get("REDSHIFT_USER")
+REDSHIFT_PASSWORD = os.environ.get("REDSHIFT_PASSWORD")
+REDSHIFT_SRC_SCHEMA_PREFIX = os.environ.get("REDSHIFT_SRC_SCHEMA_PREFIX")
+REDSHIFT_TGT_SCHEMA_PREFIX = os.environ.get("REDSHIFT_TGT_SCHEMA_PREFIX")
+
+pytestmark = pytest.mark.skipif(
+    not all([REDSHIFT_HOST, REDSHIFT_DATABASE, REDSHIFT_USER, REDSHIFT_PASSWORD, REDSHIFT_SRC_SCHEMA_PREFIX, REDSHIFT_TGT_SCHEMA_PREFIX]),
+    reason="Redshift environment variables not set",
+)
+
+
+@pytest.fixture(scope="module")
+def conn() -> Generator:
+    redshift_connector.paramstyle = "qmark"
+    c = redshift_connector.connect(
+        host=REDSHIFT_HOST,
+        port=REDSHIFT_PORT,
+        database=REDSHIFT_DATABASE,
+        user=REDSHIFT_USER,
+        password=REDSHIFT_PASSWORD,
+    )
+    c.autocommit = True
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def adapter(conn) -> RedshiftAdapter:
+    return RedshiftAdapter(conn)
+
+
+@pytest.fixture
+def executor(adapter) -> Executor:
+    return Executor(adapter)
+
+
+@pytest.fixture
+def registry(conn) -> Generator[SchemaRegistry]:
+    r = SchemaRegistry(conn)
+    yield r
+    r.teardown()
+
+
+@pytest.fixture
+def src_schema(registry: SchemaRegistry) -> str:
+    return registry.create_schema(prefix=REDSHIFT_SRC_SCHEMA_PREFIX)
+
+
+@pytest.fixture
+def tgt_schema(registry: SchemaRegistry) -> str:
+    return registry.create_schema(prefix=REDSHIFT_TGT_SCHEMA_PREFIX)
+
+
+@pytest.fixture
+def src_table(conn, registry, src_schema) -> Table:
+    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
+    return Table(conn, src_schema, "events", columns).create(registry)
+
+
+@pytest.fixture
+def tgt_table(conn, registry, tgt_schema) -> Table:
+    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
+    return Table(conn, tgt_schema, "daily_stats", columns).create(registry)
+
+
+def test_full_refresh_templated(conn, executor, registry, src_table, tgt_table):
+    src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
+
+    class TemplatedTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        sql = """
+        select
+            user_id,
+            max(event_date) as event_date,
+            sum(event_count) as event_count
+        from {{ source_table }}
+        group by user_id
+        """
+
+    executor.run(TemplatedTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 8},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 7},
+        ],
+        order_by=["user_id"],
+    )
+
+
+def test_full_refresh_non_templated(conn, executor, registry, tgt_table):
+    class NonTemplatedTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        sql = "select 42 as user_id, '2024-01-01'::date as event_date, 100 as event_count"
+
+    executor.run(NonTemplatedTransform())
+
+    tgt_table.assert_table_equals([{"user_id": 42, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
+
+
+def test_delete_insert_single_unique_key(conn, executor, registry, src_table, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = "user_id"
+        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
+
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id"],
+    )
+
+    src_table.delete()
+    src_table.insert([(3, "2024-01-03", 35), (4, "2024-01-04", 40)])
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 35},
+            {"user_id": 4, "event_date": datetime.date(2024, 1, 4), "event_count": 40},
+        ],
+        order_by=["user_id"],
+    )
+
+
+def test_delete_insert_composite_unique_key(conn, executor, registry, src_table, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
+    src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = ["user_id", "event_date"]
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 3), "event_count": 35},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+    src_table.delete()
+    src_table.insert([(1, "2024-01-03", 31), (2, "2024-01-03", 36), (1, "2024-01-04", 40), (2, "2024-01-04", 45)])
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 3), "event_count": 31},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 4), "event_count": 40},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 3), "event_count": 36},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 4), "event_count": 45},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_delete_insert_with_incremental_predicates_single_string(conn, executor, registry, src_table, tgt_table):
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = "user_id"
+        incremental_predicates = f"{TARGET_TABLE_ALIAS}.event_count > 15"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 1), "event_count": 5},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 2), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_delete_insert_with_incremental_predicates_list(conn, executor, registry, src_table, tgt_table):
+    src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
+    tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = ["user_id", "event_date"]
+        incremental_predicates = [f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"]
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 5},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 8},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_delete_insert_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
+    cursor = conn.cursor()
+    cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = "user_id"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_delete_insert_without_unique_key_raises_error(executor, tgt_schema, src_table):
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    class DeleteInsertTransform(Transformation):
+        target_schema = tgt_schema
+        target_table = "bad_incremental"
+        materialization = "delete_insert"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    with pytest.raises(ValueError, match="unique_key is required for delete_insert materialization"):
+        executor.run(DeleteInsertTransform(), params={"source_table": src_table.qualified_name})
+
+
+def test_merge_single_unique_key(conn, executor, registry, src_table, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
+
+    class MergeTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = "user_id"
+        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
+
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id"],
+    )
+
+    src_table.delete()
+    src_table.insert([(3, "2024-01-03", 35), (4, "2024-01-04", 40)])
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 35},
+            {"user_id": 4, "event_date": datetime.date(2024, 1, 4), "event_count": 40},
+        ],
+        order_by=["user_id"],
+    )
+
+
+def test_merge_composite_unique_key(conn, executor, registry, src_table, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
+    src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
+
+    class MergeTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = ["user_id", "event_date"]
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 3), "event_count": 35},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+    src_table.delete()
+    src_table.insert([(1, "2024-01-03", 31), (2, "2024-01-03", 36), (1, "2024-01-04", 40), (2, "2024-01-04", 45)])
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 3), "event_count": 31},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 4), "event_count": 40},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 3), "event_count": 36},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 4), "event_count": 45},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_merge_with_incremental_predicates_single_string(conn, executor, registry, src_table, tgt_table):
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
+
+    class MergeTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = "user_id"
+        incremental_predicates = f"{TARGET_TABLE_ALIAS}.event_count > 15"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 1), "event_count": 5},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 2), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_merge_with_incremental_predicates_list(conn, executor, registry, src_table, tgt_table):
+    src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
+    tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
+
+    class MergeTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = ["user_id", "event_date"]
+        incremental_predicates = [f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"]
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 5},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 2), "event_count": 16},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 8},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 26},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_merge_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    class MergeTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = "user_id"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_merge_without_unique_key_raises_error(executor, src_table):
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    class MergeTransform(Transformation):
+        target_schema = src_table.schema
+        target_table = "bad_merge"
+        materialization = "merge"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
+
+    with pytest.raises(ValueError, match="unique_key is required for merge materialization"):
+        executor.run(MergeTransform(), params={"source_table": src_table.qualified_name})
+
+
+def test_full_refresh_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 100)])
+
+    class FailingTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        sql = "select * from nonexistent_table"
+
+    with pytest.raises(redshift_connector.error.ProgrammingError):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists(tgt_table.schema, tgt_table.name)
+    tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
+
+
+def test_delete_insert_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 100)])
+
+    class FailingTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "delete_insert"
+        unique_key = "user_id"
+        sql = "select * from nonexistent_table"
+
+    with pytest.raises(redshift_connector.error.ProgrammingError):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists(tgt_table.schema, tgt_table.name)
+    tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_merge_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+    tgt_table.insert([(1, "2024-01-01", 100)])
+
+    class FailingTransform(Transformation):
+        target_schema = tgt_table.schema
+        target_table = tgt_table.name
+        materialization = "merge"
+        unique_key = "user_id"
+        sql = "select * from nonexistent_table"
+
+    with pytest.raises(redshift_connector.error.ProgrammingError):
+        executor.run(FailingTransform())
+
+    assert adapter.table_exists(tgt_table.schema, tgt_table.name)
+    tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
