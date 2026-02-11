@@ -1,4 +1,10 @@
 from sqlmat.adapters.base import Adapter
+from sqlmat.core.events import (
+    SqlRendered,
+    TransformationCompleted,
+    TransformationFailed,
+    TransformationStarted,
+)
 from sqlmat.core.template import TemplateEngine
 from sqlmat.core.transformation import Transformation
 
@@ -7,6 +13,7 @@ class Executor:
     def __init__(self, adapter: Adapter):
         self.adapter = adapter
         self.template_engine = TemplateEngine()
+        self._emit = adapter._event_handler
 
     def run(self, transformation: Transformation, params: dict | None = None) -> None:
         if params is None:
@@ -19,16 +26,25 @@ class Executor:
         unique_key = transformation.unique_key
         incremental_predicates = transformation.incremental_predicates
 
+        self._emit(TransformationStarted(target_schema, target_table, materialization))
+
         full_table_name = transformation.get_full_table_name()
         context = self.template_engine.create_context(params, full_table_name)
         rendered_sql = self.template_engine.render(sql, context)
 
-        if materialization == "delete_insert":
-            self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
-        elif materialization == "merge":
-            self._run_merge(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
-        else:
-            self._run_full_refresh(target_schema, target_table, rendered_sql)
+        self._emit(SqlRendered(target_schema, target_table, rendered_sql))
+
+        try:
+            if materialization == "delete_insert":
+                self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
+            elif materialization == "merge":
+                self._run_merge(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
+            else:
+                self._run_full_refresh(target_schema, target_table, rendered_sql)
+            self._emit(TransformationCompleted(target_schema, target_table, materialization))
+        except Exception as e:
+            self._emit(TransformationFailed(target_schema, target_table, materialization, e))
+            raise
 
     def _run_full_refresh(self, target_schema: str, target_table: str, rendered_sql: str) -> None:
         self.adapter.begin_transaction()

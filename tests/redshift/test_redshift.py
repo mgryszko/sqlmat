@@ -1,57 +1,20 @@
 import datetime
-from collections.abc import Generator
 
-import duckdb
 import pytest
+import redshift_connector
 
 from sqlmat import Executor, Transformation
-from sqlmat.adapters import TARGET_TABLE_ALIAS, DuckDBAdapter
-from sqlmat.test import SchemaRegistry, Table
+from sqlmat.adapters import TARGET_TABLE_ALIAS, RedshiftAdapter
 
 
 @pytest.fixture
-def conn() -> Generator[duckdb.DuckDBPyConnection]:
-    with duckdb.connect(":memory:") as c:
-        yield c
-
-
-@pytest.fixture
-def adapter(conn) -> DuckDBAdapter:
-    return DuckDBAdapter(conn)
+def adapter(conn) -> RedshiftAdapter:
+    return RedshiftAdapter(conn)
 
 
 @pytest.fixture
 def executor(adapter) -> Executor:
     return Executor(adapter)
-
-
-@pytest.fixture
-def registry(conn) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
-
-
-@pytest.fixture
-def src_schema(registry: SchemaRegistry) -> str:
-    return registry.create_schema(prefix="staging")
-
-
-@pytest.fixture
-def tgt_schema(registry: SchemaRegistry) -> str:
-    return registry.create_schema(prefix="analytics")
-
-
-@pytest.fixture
-def src_table(conn, registry, src_schema) -> Table:
-    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
-    return Table(conn, src_schema, "events", columns).create(registry)
-
-
-@pytest.fixture
-def tgt_table(conn, registry, tgt_schema) -> Table:
-    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
-    return Table(conn, tgt_schema, "daily_stats", columns).create(registry)
 
 
 def test_full_refresh_templated(conn, executor, registry, src_table, tgt_table):
@@ -223,7 +186,8 @@ def test_delete_insert_with_incremental_predicates_list(conn, executor, registry
 
 
 def test_delete_insert_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
-    conn.execute(f"drop table if exists {tgt_table.qualified_name}")
+    cursor = conn.cursor()
+    cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class DeleteInsertTransform(Transformation):
@@ -434,7 +398,7 @@ def test_full_refresh_rollback_on_error(conn, adapter, executor, registry, tgt_t
         target_table = tgt_table.name
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+    with pytest.raises(redshift_connector.error.ProgrammingError):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
@@ -451,7 +415,7 @@ def test_delete_insert_rollback_on_error(conn, adapter, executor, registry, tgt_
         unique_key = "user_id"
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+    with pytest.raises(redshift_connector.error.ProgrammingError):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
@@ -469,7 +433,7 @@ def test_merge_rollback_on_error(conn, adapter, executor, registry, tgt_table):
         unique_key = "user_id"
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+    with pytest.raises(redshift_connector.error.ProgrammingError):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)

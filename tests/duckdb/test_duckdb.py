@@ -1,83 +1,20 @@
 import datetime
-import os
-from collections.abc import Generator
 
+import duckdb
 import pytest
-import redshift_connector
-from dotenv import load_dotenv
 
 from sqlmat import Executor, Transformation
-from sqlmat.adapters import TARGET_TABLE_ALIAS, RedshiftAdapter
-from sqlmat.test import SchemaRegistry, Table
-
-load_dotenv()
-
-REDSHIFT_HOST = os.environ.get("REDSHIFT_HOST")
-REDSHIFT_PORT = int(os.environ.get("REDSHIFT_PORT", "5439"))
-REDSHIFT_DATABASE = os.environ.get("REDSHIFT_DATABASE")
-REDSHIFT_USER = os.environ.get("REDSHIFT_USER")
-REDSHIFT_PASSWORD = os.environ.get("REDSHIFT_PASSWORD")
-REDSHIFT_SRC_SCHEMA_PREFIX = os.environ.get("REDSHIFT_SRC_SCHEMA_PREFIX")
-REDSHIFT_TGT_SCHEMA_PREFIX = os.environ.get("REDSHIFT_TGT_SCHEMA_PREFIX")
-
-pytestmark = pytest.mark.skipif(
-    not all([REDSHIFT_HOST, REDSHIFT_DATABASE, REDSHIFT_USER, REDSHIFT_PASSWORD, REDSHIFT_SRC_SCHEMA_PREFIX, REDSHIFT_TGT_SCHEMA_PREFIX]),
-    reason="Redshift environment variables not set",
-)
-
-
-@pytest.fixture(scope="module")
-def conn() -> Generator:
-    redshift_connector.paramstyle = "qmark"
-    c = redshift_connector.connect(
-        host=REDSHIFT_HOST,
-        port=REDSHIFT_PORT,
-        database=REDSHIFT_DATABASE,
-        user=REDSHIFT_USER,
-        password=REDSHIFT_PASSWORD,
-    )
-    c.autocommit = True
-    yield c
-    c.close()
+from sqlmat.adapters import TARGET_TABLE_ALIAS, DuckDBAdapter
 
 
 @pytest.fixture
-def adapter(conn) -> RedshiftAdapter:
-    return RedshiftAdapter(conn)
+def adapter(conn) -> DuckDBAdapter:
+    return DuckDBAdapter(conn)
 
 
 @pytest.fixture
 def executor(adapter) -> Executor:
     return Executor(adapter)
-
-
-@pytest.fixture
-def registry(conn) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
-
-
-@pytest.fixture
-def src_schema(registry: SchemaRegistry) -> str:
-    return registry.create_schema(prefix=REDSHIFT_SRC_SCHEMA_PREFIX)
-
-
-@pytest.fixture
-def tgt_schema(registry: SchemaRegistry) -> str:
-    return registry.create_schema(prefix=REDSHIFT_TGT_SCHEMA_PREFIX)
-
-
-@pytest.fixture
-def src_table(conn, registry, src_schema) -> Table:
-    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
-    return Table(conn, src_schema, "events", columns).create(registry)
-
-
-@pytest.fixture
-def tgt_table(conn, registry, tgt_schema) -> Table:
-    columns = [("user_id", "integer"), ("event_date", "date"), ("event_count", "integer")]
-    return Table(conn, tgt_schema, "daily_stats", columns).create(registry)
 
 
 def test_full_refresh_templated(conn, executor, registry, src_table, tgt_table):
@@ -249,8 +186,7 @@ def test_delete_insert_with_incremental_predicates_list(conn, executor, registry
 
 
 def test_delete_insert_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
-    cursor = conn.cursor()
-    cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
+    conn.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class DeleteInsertTransform(Transformation):
@@ -461,7 +397,7 @@ def test_full_refresh_rollback_on_error(conn, adapter, executor, registry, tgt_t
         target_table = tgt_table.name
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(redshift_connector.error.ProgrammingError):
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
@@ -478,7 +414,7 @@ def test_delete_insert_rollback_on_error(conn, adapter, executor, registry, tgt_
         unique_key = "user_id"
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(redshift_connector.error.ProgrammingError):
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
@@ -496,7 +432,7 @@ def test_merge_rollback_on_error(conn, adapter, executor, registry, tgt_table):
         unique_key = "user_id"
         sql = "select * from nonexistent_table"
 
-    with pytest.raises(redshift_connector.error.ProgrammingError):
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
         executor.run(FailingTransform())
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)

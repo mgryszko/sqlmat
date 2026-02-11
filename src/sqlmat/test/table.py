@@ -77,7 +77,7 @@ class Table:
 
     def _fetch_as_dicts(self, columns: list[str] | None = None) -> list[dict[str, object]]:
         cols = columns if columns else [name for name, _ in self._columns]
-        cursor = self._conn.cursor().execute(f"select {", ".join(cols)} from {self.qualified_name}")
+        cursor = self._conn.cursor().execute(f"select {', '.join(cols)} from {self.qualified_name}")
         return [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
 
     @staticmethod

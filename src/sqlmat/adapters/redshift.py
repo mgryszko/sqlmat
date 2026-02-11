@@ -1,23 +1,38 @@
 from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
+from sqlmat.core.events import (
+    EventHandler,
+    RowsDeleted,
+    RowsInserted,
+    RowsMerged,
+    SqlExecuted,
+    TableCreated,
+    TableDropped,
+    TableExistenceChecked,
+    TransactionBegun,
+    TransactionCommitted,
+    TransactionRolledBack,
+    _noop_handler,
+)
 
 
 class RedshiftAdapter(Adapter):
-    def __init__(self, conn):
+    def __init__(self, conn, event_handler: EventHandler = _noop_handler):
+        super().__init__(event_handler)
         self.conn = conn
 
     def execute(self, sql: str) -> None:
+        self._emit(SqlExecuted(sql=sql))
         self._execute(sql)
 
     def table_exists(self, schema: str, table: str) -> bool:
-        result = self._fetchone(
-            """
+        sql = """
             select count(*)
             from information_schema.tables
             where lower(table_schema) = lower(?)
               and lower(table_name) = lower(?)
-            """,
-            [schema, table],
-        )
+            """
+        self._emit(TableExistenceChecked(schema=schema, table=table, sql=sql))
+        result = self._fetchone(sql, [schema, table])
         return result[0] > 0
 
     def get_columns(self, schema: str, table: str) -> list[str]:
@@ -35,11 +50,15 @@ class RedshiftAdapter(Adapter):
 
     def create_table_as(self, schema: str, table: str, sql: str) -> None:
         full_table_name = f"{schema}.{table}"
-        self._execute(f"create table {full_table_name} as {sql}")
+        create_sql = f"create table {full_table_name} as {sql}"
+        self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
+        self._execute(create_sql)
 
     def drop_table(self, schema: str, table: str) -> None:
         full_table_name = f"{schema}.{table}"
-        self._execute(f"drop table if exists {full_table_name}")
+        drop_sql = f"drop table if exists {full_table_name}"
+        self._emit(TableDropped(schema=schema, table=table, sql=drop_sql))
+        self._execute(drop_sql)
 
     def delete_with_using(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
@@ -57,6 +76,7 @@ class RedshiftAdapter(Adapter):
             using {temp_table}
             where {where_clause}
         """
+        self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
         self._execute(delete_sql)
 
     def delete_with_in(
@@ -73,6 +93,7 @@ class RedshiftAdapter(Adapter):
             delete from {full_target}
             where {where_clause}
         """
+        self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
         self._execute(delete_sql)
 
     def insert_from_select(self, target_schema: str, target_table: str, columns: list[str], temp_table: str) -> None:
@@ -82,6 +103,7 @@ class RedshiftAdapter(Adapter):
             insert into {full_target} ({columns_str})
             select {columns_str} from {temp_table}
         """
+        self._emit(RowsInserted(schema=target_schema, table=target_table, sql=insert_sql))
         self._execute(insert_sql)
 
     def merge(
@@ -109,6 +131,7 @@ class RedshiftAdapter(Adapter):
             when matched then update set {update_set}
             when not matched then insert ({insert_columns}) values ({insert_values})
         """
+        self._emit(RowsMerged(schema=target_schema, table=target_table, sql=merge_sql))
         self._execute(merge_sql)
 
     @staticmethod
@@ -116,13 +139,19 @@ class RedshiftAdapter(Adapter):
         return [p.replace(f"{TARGET_TABLE_ALIAS}.", f"{full_target}.") for p in predicates]
 
     def begin_transaction(self) -> None:
-        self._execute("begin transaction")
+        sql = "begin transaction"
+        self._emit(TransactionBegun(sql=sql))
+        self._execute(sql)
 
     def commit(self) -> None:
-        self._execute("commit")
+        sql = "commit"
+        self._emit(TransactionCommitted(sql=sql))
+        self._execute(sql)
 
     def rollback(self) -> None:
-        self._execute("rollback")
+        sql = "rollback"
+        self._emit(TransactionRolledBack(sql=sql))
+        self._execute(sql)
 
     def _execute(self, sql: str, params: list | None = None) -> None:
         cursor = self.conn.cursor()
@@ -137,4 +166,3 @@ class RedshiftAdapter(Adapter):
         cursor = self.conn.cursor()
         cursor.execute(sql, params)
         return cursor.fetchall()
-

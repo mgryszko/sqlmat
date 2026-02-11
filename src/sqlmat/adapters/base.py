@@ -1,10 +1,18 @@
 from abc import ABC, abstractmethod
 
+from sqlmat.core.events import Event, EventHandler, _noop_handler
+
 TARGET_TABLE_ALIAS = "target"
 SOURCE_TABLE_ALIAS = "source"
 
 
 class Adapter(ABC):
+    def __init__(self, event_handler: EventHandler = _noop_handler):
+        self._event_handler = event_handler
+
+    def _emit(self, event: Event) -> None:
+        self._event_handler(event)
+
     @abstractmethod
     def execute(self, sql: str) -> None:
         pass

@@ -1,23 +1,38 @@
 from sqlmat.adapters.base import SOURCE_TABLE_ALIAS, TARGET_TABLE_ALIAS, Adapter
+from sqlmat.core.events import (
+    EventHandler,
+    RowsDeleted,
+    RowsInserted,
+    RowsMerged,
+    SqlExecuted,
+    TableCreated,
+    TableDropped,
+    TableExistenceChecked,
+    TransactionBegun,
+    TransactionCommitted,
+    TransactionRolledBack,
+    _noop_handler,
+)
 
 
 class DuckDBAdapter(Adapter):
-    def __init__(self, conn):
+    def __init__(self, conn, event_handler: EventHandler = _noop_handler):
+        super().__init__(event_handler)
         self.conn = conn
 
     def execute(self, sql: str) -> None:
+        self._emit(SqlExecuted(sql=sql))
         self.conn.execute(sql)
 
     def table_exists(self, schema: str, table: str) -> bool:
-        result = self.conn.execute(
-            """
+        sql = """
             select count(*)
             from system.information_schema.tables
             where lower(table_schema) = lower(?)
               and lower(table_name) = lower(?)
-            """,
-            [schema, table],
-        ).fetchone()
+            """
+        self._emit(TableExistenceChecked(schema=schema, table=table, sql=sql))
+        result = self.conn.execute(sql, [schema, table]).fetchone()
         return result[0] > 0
 
     def get_columns(self, schema: str, table: str) -> list[str]:
@@ -36,11 +51,13 @@ class DuckDBAdapter(Adapter):
     def create_table_as(self, schema: str, table: str, sql: str) -> None:
         full_table_name = f"{schema}.{table}"
         create_sql = f"create table {full_table_name} as {sql}"
+        self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
         self.conn.execute(create_sql)
 
     def drop_table(self, schema: str, table: str) -> None:
         full_table_name = f"{schema}.{table}"
         drop_sql = f"drop table if exists {full_table_name}"
+        self._emit(TableDropped(schema=schema, table=table, sql=drop_sql))
         self.conn.execute(drop_sql)
 
     def delete_with_using(
@@ -59,6 +76,7 @@ class DuckDBAdapter(Adapter):
             using {temp_table}
             where {where_clause}
         """
+        self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
         self.conn.execute(delete_sql)
 
     def delete_with_in(
@@ -75,6 +93,7 @@ class DuckDBAdapter(Adapter):
             delete from {full_target} as {TARGET_TABLE_ALIAS}
             where {where_clause}
         """
+        self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
         self.conn.execute(delete_sql)
 
     def insert_from_select(self, target_schema: str, target_table: str, columns: list[str], temp_table: str) -> None:
@@ -84,6 +103,7 @@ class DuckDBAdapter(Adapter):
             insert into {full_target} ({columns_str})
             select {columns_str} from {temp_table}
         """
+        self._emit(RowsInserted(schema=target_schema, table=target_table, sql=insert_sql))
         self.conn.execute(insert_sql)
 
     def merge(
@@ -104,13 +124,20 @@ class DuckDBAdapter(Adapter):
             when matched then update set *
             when not matched then insert *
         """
+        self._emit(RowsMerged(schema=target_schema, table=target_table, sql=merge_sql))
         self.conn.execute(merge_sql)
 
     def begin_transaction(self) -> None:
-        self.conn.execute("begin transaction")
+        sql = "begin transaction"
+        self._emit(TransactionBegun(sql=sql))
+        self.conn.execute(sql)
 
     def commit(self) -> None:
-        self.conn.execute("commit")
+        sql = "commit"
+        self._emit(TransactionCommitted(sql=sql))
+        self.conn.execute(sql)
 
     def rollback(self) -> None:
-        self.conn.execute("rollback")
+        sql = "rollback"
+        self._emit(TransactionRolledBack(sql=sql))
+        self.conn.execute(sql)

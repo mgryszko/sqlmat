@@ -1,0 +1,51 @@
+import logging
+
+from sqlmat.core.events import (
+    Event,
+    RowsDeleted,
+    RowsInserted,
+    RowsMerged,
+    SqlExecuted,
+    SqlRendered,
+    TableCreated,
+    TableDropped,
+    TableExistenceChecked,
+    TransactionBegun,
+    TransactionCommitted,
+    TransactionRolledBack,
+    TransformationCompleted,
+    TransformationFailed,
+    TransformationStarted,
+)
+
+
+class PythonLoggingSink:
+    def __init__(self, logger: logging.Logger | None = None):
+        self._logger = logger or logging.getLogger("sqlmat")
+
+    def __call__(self, event: Event) -> None:
+        match event:
+            case TransformationStarted(target_schema=s, target_table=t, materialization=m):
+                self._logger.info("Starting %s transformation for %s.%s", m, s, t)
+            case SqlRendered(sql=sql):
+                self._logger.debug("Rendered SQL: %s", sql)
+            case TransformationCompleted(target_schema=s, target_table=t, materialization=m):
+                self._logger.info("Completed %s transformation for %s.%s", m, s, t)
+            case TransformationFailed(target_schema=s, target_table=t, error=e):
+                self._logger.error("Failed transformation for %s.%s: %s", s, t, e)
+            case TransactionBegun(sql=sql) | TransactionCommitted(sql=sql) | TransactionRolledBack(sql=sql):
+                self._logger.debug("Transaction: %s", sql)
+            case TableDropped(schema=s, table=t, sql=sql):
+                self._logger.debug("Drop table %s.%s: %s", s, t, sql)
+            case TableCreated(schema=s, table=t, sql=sql):
+                self._logger.debug("Create table %s.%s: %s", s, t, sql)
+            case TableExistenceChecked(schema=s, table=t, sql=sql):
+                self._logger.debug("Table exists check %s.%s: %s", s, t, sql)
+            case RowsDeleted(schema=s, table=t, sql=sql):
+                self._logger.debug("Delete from %s.%s: %s", s, t, sql)
+            case RowsInserted(schema=s, table=t, sql=sql):
+                self._logger.debug("Insert into %s.%s: %s", s, t, sql)
+            case RowsMerged(schema=s, table=t, sql=sql):
+                self._logger.debug("Merge into %s.%s: %s", s, t, sql)
+            case SqlExecuted(sql=sql):
+                self._logger.debug("SQL: %s", sql)
