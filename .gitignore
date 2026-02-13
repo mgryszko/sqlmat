@@ -17,3 +17,6 @@ wheels/
 
 # Local agent memory files
 CLAUDE.local.md
+
+# Approval test received files
+*.received.*

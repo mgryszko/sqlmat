@@ -11,9 +11,9 @@ class TransformationStarted:
 
 @dataclass(frozen=True)
 class SqlRendered:
-    target_schema: str
-    target_table: str
     sql: str
+    target_schema: str | None = None
+    target_table: str | None = None
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,30 @@ class TransformationFailed:
     target_table: str
     materialization: str
     error: Exception
+
+
+@dataclass(frozen=True)
+class UnloadStarted:
+    destination: str
+    format: str
+
+
+@dataclass(frozen=True)
+class UnloadCompleted:
+    destination: str
+    format: str
+
+
+@dataclass(frozen=True)
+class UnloadFailed:
+    destination: str
+    format: str
+    error: Exception
+
+
+@dataclass(frozen=True)
+class DataUnloaded:
+    sql: str
 
 
 @dataclass(frozen=True)
@@ -98,6 +122,10 @@ type Event = (
     | SqlRendered
     | TransformationCompleted
     | TransformationFailed
+    | UnloadStarted
+    | UnloadCompleted
+    | UnloadFailed
+    | DataUnloaded
     | TransactionBegun
     | TransactionCommitted
     | TransactionRolledBack
@@ -112,5 +140,5 @@ type Event = (
 type EventHandler = Callable[[Event], None]
 
 
-def _noop_handler(_event: Event) -> None:
+def noop_handler(_event: Event) -> None:
     pass

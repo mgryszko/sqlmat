@@ -1,5 +1,6 @@
 from sqlmat.adapters.base import SOURCE_TABLE_ALIAS, TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
+    DataUnloaded,
     EventHandler,
     RowsDeleted,
     RowsInserted,
@@ -11,18 +12,18 @@ from sqlmat.core.events import (
     TransactionBegun,
     TransactionCommitted,
     TransactionRolledBack,
-    _noop_handler,
+    noop_handler,
 )
 
 
 class DuckDBAdapter(Adapter):
-    def __init__(self, conn, event_handler: EventHandler = _noop_handler):
+    def __init__(self, conn, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
-        self.conn = conn
+        self._conn = conn
 
     def execute(self, sql: str) -> None:
         self._emit(SqlExecuted(sql=sql))
-        self.conn.execute(sql)
+        self._conn.execute(sql)
 
     def table_exists(self, schema: str, table: str) -> bool:
         sql = """
@@ -32,11 +33,11 @@ class DuckDBAdapter(Adapter):
               and lower(table_name) = lower(?)
             """
         self._emit(TableExistenceChecked(schema=schema, table=table, sql=sql))
-        result = self.conn.execute(sql, [schema, table]).fetchone()
+        result = self._conn.execute(sql, [schema, table]).fetchone()
         return result[0] > 0
 
     def get_columns(self, schema: str, table: str) -> list[str]:
-        result = self.conn.execute(
+        result = self._conn.execute(
             """
             select column_name
             from system.information_schema.columns
@@ -52,13 +53,13 @@ class DuckDBAdapter(Adapter):
         full_table_name = f"{schema}.{table}"
         create_sql = f"create table {full_table_name} as {sql}"
         self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
-        self.conn.execute(create_sql)
+        self._conn.execute(create_sql)
 
     def drop_table(self, schema: str, table: str) -> None:
         full_table_name = f"{schema}.{table}"
         drop_sql = f"drop table if exists {full_table_name}"
         self._emit(TableDropped(schema=schema, table=table, sql=drop_sql))
-        self.conn.execute(drop_sql)
+        self._conn.execute(drop_sql)
 
     def delete_with_using(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
@@ -77,7 +78,7 @@ class DuckDBAdapter(Adapter):
             where {where_clause}
         """
         self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
-        self.conn.execute(delete_sql)
+        self._conn.execute(delete_sql)
 
     def delete_with_in(
         self, target_schema: str, target_table: str, temp_table: str, unique_key: str, predicates: list[str] | None = None
@@ -94,7 +95,7 @@ class DuckDBAdapter(Adapter):
             where {where_clause}
         """
         self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
-        self.conn.execute(delete_sql)
+        self._conn.execute(delete_sql)
 
     def insert_from_select(self, target_schema: str, target_table: str, columns: list[str], temp_table: str) -> None:
         full_target = f"{target_schema}.{target_table}"
@@ -104,7 +105,7 @@ class DuckDBAdapter(Adapter):
             select {columns_str} from {temp_table}
         """
         self._emit(RowsInserted(schema=target_schema, table=target_table, sql=insert_sql))
-        self.conn.execute(insert_sql)
+        self._conn.execute(insert_sql)
 
     def merge(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
@@ -125,19 +126,29 @@ class DuckDBAdapter(Adapter):
             when not matched then insert *
         """
         self._emit(RowsMerged(schema=target_schema, table=target_table, sql=merge_sql))
-        self.conn.execute(merge_sql)
+        self._conn.execute(merge_sql)
 
     def begin_transaction(self) -> None:
         sql = "begin transaction"
         self._emit(TransactionBegun(sql=sql))
-        self.conn.execute(sql)
+        self._conn.execute(sql)
 
     def commit(self) -> None:
         sql = "commit"
         self._emit(TransactionCommitted(sql=sql))
-        self.conn.execute(sql)
+        self._conn.execute(sql)
 
     def rollback(self) -> None:
         sql = "rollback"
         self._emit(TransactionRolledBack(sql=sql))
-        self.conn.execute(sql)
+        self._conn.execute(sql)
+
+    def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
+        option_parts = [f"FORMAT {fmt.upper()}"]
+        if options:
+            option_parts.extend(options)
+        options_str = ", ".join(option_parts)
+        copy_sql = f"COPY ({sql}) TO '{destination}' ({options_str})"
+
+        self._conn.execute(copy_sql)
+        self._emit(DataUnloaded(sql=copy_sql))

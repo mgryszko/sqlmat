@@ -1,38 +1,68 @@
 from sqlmat.adapters.base import Adapter
 from sqlmat.core.events import (
+    EventHandler,
     SqlRendered,
     TransformationCompleted,
     TransformationFailed,
     TransformationStarted,
+    UnloadCompleted,
+    UnloadFailed,
+    UnloadStarted,
+    noop_handler,
 )
 from sqlmat.core.template import TemplateEngine
-from sqlmat.core.transformation import Transformation
+from sqlmat.core.transformation import (
+    FullRefreshTableTransformation,
+    IncrementalTableTransformation,
+    Unload,
+)
 
 
 class Executor:
-    def __init__(self, adapter: Adapter):
-        self.adapter = adapter
-        self.template_engine = TemplateEngine()
-        self._emit = adapter._event_handler
+    def __init__(self, adapter: Adapter, event_handler: EventHandler = noop_handler):
+        self._adapter = adapter
+        self._template_engine = TemplateEngine()
+        self._event_handler = event_handler
 
-    def run(self, transformation: Transformation, params: dict | None = None) -> None:
-        if params is None:
-            params = {}
+    def run(
+        self,
+        operation: FullRefreshTableTransformation | IncrementalTableTransformation | Unload,
+        template_context: dict | None = None,
+    ) -> None:
+        if template_context is None:
+            template_context = {}
 
+        if isinstance(operation, FullRefreshTableTransformation):
+            self._execute_table_transformation(operation, template_context)
+        elif isinstance(operation, IncrementalTableTransformation):
+            self._execute_table_transformation(operation, template_context)
+        elif isinstance(operation, Unload):
+            self._run_unload(operation, template_context)
+
+    def _execute_table_transformation(
+        self,
+        transformation: FullRefreshTableTransformation | IncrementalTableTransformation,
+        template_context: dict,
+    ) -> None:
         target_schema = transformation.target_schema
         target_table = transformation.target_table
         sql = transformation.sql
-        materialization = transformation.materialization
-        unique_key = transformation.unique_key
-        incremental_predicates = transformation.incremental_predicates
+
+        if isinstance(transformation, IncrementalTableTransformation):
+            materialization = transformation.strategy
+            unique_key = transformation.unique_key
+            incremental_predicates = transformation.incremental_predicates
+        else:
+            materialization = "full_refresh"
+            unique_key = None
+            incremental_predicates = None
 
         self._emit(TransformationStarted(target_schema, target_table, materialization))
 
         full_table_name = transformation.get_full_table_name()
-        context = self.template_engine.create_context(params, full_table_name)
-        rendered_sql = self.template_engine.render(sql, context)
+        rendered_sql = self._template_engine.render(sql, template_context | {"target_table": full_table_name})
 
-        self._emit(SqlRendered(target_schema, target_table, rendered_sql))
+        self._emit(SqlRendered(sql=rendered_sql, target_schema=target_schema, target_table=target_table))
 
         try:
             if materialization == "delete_insert":
@@ -47,13 +77,13 @@ class Executor:
             raise
 
     def _run_full_refresh(self, target_schema: str, target_table: str, rendered_sql: str) -> None:
-        self.adapter.begin_transaction()
+        self._adapter.begin_transaction()
         try:
-            self.adapter.drop_table(target_schema, target_table)
-            self.adapter.create_table_as(target_schema, target_table, rendered_sql)
-            self.adapter.commit()
+            self._adapter.drop_table(target_schema, target_table)
+            self._adapter.create_table_as(target_schema, target_table, rendered_sql)
+            self._adapter.commit()
         except Exception:
-            self.adapter.rollback()
+            self._adapter.rollback()
             raise
 
     def _run_delete_insert(
@@ -70,31 +100,31 @@ class Executor:
         temp_table = f"{target_table}_tmp"
         temp_table_full = f"{target_schema}.{temp_table}"
 
-        self.adapter.begin_transaction()
+        self._adapter.begin_transaction()
         try:
-            self.adapter.drop_table(target_schema, temp_table)
-            self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
+            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
-            if not self.adapter.table_exists(target_schema, target_table):
-                self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
-                self.adapter.commit()
+            if not self._adapter.table_exists(target_schema, target_table):
+                self._adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self._adapter.commit()
                 return
 
-            columns = self.adapter.get_columns(target_schema, target_table)
+            columns = self._adapter.get_columns(target_schema, target_table)
 
             predicates = self._normalize_predicates(incremental_predicates)
 
             if isinstance(unique_key, list):
-                self.adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key, predicates)
+                self._adapter.delete_with_using(target_schema, target_table, temp_table_full, unique_key, predicates)
             else:
-                self.adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
+                self._adapter.delete_with_in(target_schema, target_table, temp_table_full, unique_key, predicates)
 
-            self.adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
+            self._adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
 
-            self.adapter.drop_table(target_schema, temp_table)
-            self.adapter.commit()
+            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.commit()
         except Exception:
-            self.adapter.rollback()
+            self._adapter.rollback()
             raise
 
     def _run_merge(
@@ -111,25 +141,44 @@ class Executor:
         temp_table = f"{target_table}_tmp"
         temp_table_full = f"{target_schema}.{temp_table}"
 
-        self.adapter.begin_transaction()
+        self._adapter.begin_transaction()
         try:
-            self.adapter.drop_table(target_schema, temp_table)
-            self.adapter.create_table_as(target_schema, temp_table, rendered_sql)
+            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
-            if not self.adapter.table_exists(target_schema, target_table):
-                self.adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
-                self.adapter.commit()
+            if not self._adapter.table_exists(target_schema, target_table):
+                self._adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self._adapter.commit()
                 return
 
             predicates = self._normalize_predicates(incremental_predicates)
             unique_keys = [unique_key] if isinstance(unique_key, str) else unique_key
 
-            self.adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
+            self._adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
 
-            self.adapter.drop_table(target_schema, temp_table)
-            self.adapter.commit()
+            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.commit()
         except Exception:
-            self.adapter.rollback()
+            self._adapter.rollback()
+            raise
+
+    def _run_unload(self, unload: Unload, template_context: dict) -> None:
+        destination = unload.destination
+        fmt = unload.format
+        sql = unload.sql
+        options = unload.options
+
+        self._emit(UnloadStarted(destination, fmt))
+
+        rendered_sql = self._template_engine.render(sql, template_context)
+
+        self._emit(SqlRendered(sql=rendered_sql))
+
+        try:
+            self._adapter.copy_to(rendered_sql, destination, fmt, options)
+            self._emit(UnloadCompleted(destination, fmt))
+        except Exception as e:
+            self._emit(UnloadFailed(destination, fmt, e))
             raise
 
     def _normalize_predicates(self, predicates: str | list[str] | None) -> list[str] | None:
@@ -138,3 +187,6 @@ class Executor:
         if isinstance(predicates, str):
             return [predicates]
         return predicates
+
+    def _emit(self, event):
+        self._event_handler(event)

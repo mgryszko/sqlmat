@@ -1,6 +1,7 @@
 import logging
 
 from sqlmat.core.events import (
+    DataUnloaded,
     Event,
     RowsDeleted,
     RowsInserted,
@@ -16,6 +17,9 @@ from sqlmat.core.events import (
     TransformationCompleted,
     TransformationFailed,
     TransformationStarted,
+    UnloadCompleted,
+    UnloadFailed,
+    UnloadStarted,
 )
 
 
@@ -33,6 +37,14 @@ class PythonLoggingSink:
                 self._logger.info("Completed %s transformation for %s.%s", m, s, t)
             case TransformationFailed(target_schema=s, target_table=t, error=e):
                 self._logger.error("Failed transformation for %s.%s: %s", s, t, e)
+            case UnloadStarted(destination=d, format=f):
+                self._logger.info("Starting %s unload to %s", f, d)
+            case UnloadCompleted(destination=d, format=f):
+                self._logger.info("Completed %s unload to %s", f, d)
+            case UnloadFailed(destination=d, format=f, error=e):
+                self._logger.error("Failed %s unload to %s: %s", f, d, e)
+            case DataUnloaded(sql=sql):
+                self._logger.debug("Data unloaded: %s", sql)
             case TransactionBegun(sql=sql) | TransactionCommitted(sql=sql) | TransactionRolledBack(sql=sql):
                 self._logger.debug("Transaction: %s", sql)
             case TableDropped(schema=s, table=t, sql=sql):

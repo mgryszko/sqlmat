@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 
-from sqlmat.core.events import Event, EventHandler, _noop_handler
+from sqlmat.core.events import Event, EventHandler, noop_handler
 
 TARGET_TABLE_ALIAS = "target"
 SOURCE_TABLE_ALIAS = "source"
 
 
 class Adapter(ABC):
-    def __init__(self, event_handler: EventHandler = _noop_handler):
+    def __init__(self, event_handler: EventHandler = noop_handler):
         self._event_handler = event_handler
 
     def _emit(self, event: Event) -> None:
@@ -65,4 +65,8 @@ class Adapter(ABC):
 
     @abstractmethod
     def rollback(self) -> None:
+        pass
+
+    @abstractmethod
+    def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
         pass

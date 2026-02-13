@@ -1,4 +1,5 @@
 from sqlmat.core.events import (
+    DataUnloaded,
     RowsDeleted,
     RowsInserted,
     RowsMerged,
@@ -13,6 +14,9 @@ from sqlmat.core.events import (
     TransformationCompleted,
     TransformationFailed,
     TransformationStarted,
+    UnloadCompleted,
+    UnloadFailed,
+    UnloadStarted,
 )
 
 
@@ -33,6 +37,9 @@ class _EventMatcher:
         if self._event_type is TransformationFailed and "error" not in self._fields:
             if other.error is None:
                 return False
+        if self._event_type is UnloadFailed and "error" not in self._fields:
+            if other.error is None:
+                return False
         return True
 
     def __repr__(self):
@@ -40,44 +47,8 @@ class _EventMatcher:
         return f"{self._event_type.__name__}({fields})"
 
 
-def transformation_started(schema, table):
-    return _EventMatcher(TransformationStarted, target_schema=schema, target_table=table)
-
-
-def sql_rendered(schema, table):
-    return _EventMatcher(SqlRendered, target_schema=schema, target_table=table)
-
-
-def transformation_completed(schema, table):
-    return _EventMatcher(TransformationCompleted, target_schema=schema, target_table=table)
-
-
-def transformation_failed(schema, table):
-    return _EventMatcher(TransformationFailed, target_schema=schema, target_table=table)
-
-
-def transaction_begun():
-    return _EventMatcher(TransactionBegun)
-
-
-def transaction_committed():
-    return _EventMatcher(TransactionCommitted)
-
-
-def transaction_rolled_back():
-    return _EventMatcher(TransactionRolledBack)
-
-
-def table_dropped(schema, table):
-    return _EventMatcher(TableDropped, schema=schema, table=table)
-
-
-def table_created(schema, table):
-    return _EventMatcher(TableCreated, schema=schema, table=table)
-
-
-def table_existence_checked(schema, table):
-    return _EventMatcher(TableExistenceChecked, schema=schema, table=table)
+def data_unloaded():
+    return _EventMatcher(DataUnloaded)
 
 
 def rows_deleted(schema, table):
@@ -94,3 +65,60 @@ def rows_merged(schema, table):
 
 def sql_executed():
     return _EventMatcher(SqlExecuted)
+
+
+def sql_rendered(schema=None, table=None):
+    kwargs = {}
+    if schema is not None:
+        kwargs["target_schema"] = schema
+    if table is not None:
+        kwargs["target_table"] = table
+    return _EventMatcher(SqlRendered, **kwargs)
+
+
+def table_created(schema, table):
+    return _EventMatcher(TableCreated, schema=schema, table=table)
+
+
+def table_dropped(schema, table):
+    return _EventMatcher(TableDropped, schema=schema, table=table)
+
+
+def table_existence_checked(schema, table):
+    return _EventMatcher(TableExistenceChecked, schema=schema, table=table)
+
+
+def table_transformation_completed(schema, table):
+    return _EventMatcher(TransformationCompleted, target_schema=schema, target_table=table)
+
+
+def table_transformation_failed(schema, table):
+    return _EventMatcher(TransformationFailed, target_schema=schema, target_table=table)
+
+
+def table_transformation_started(schema, table):
+    return _EventMatcher(TransformationStarted, target_schema=schema, target_table=table)
+
+
+def transaction_begun():
+    return _EventMatcher(TransactionBegun)
+
+
+def transaction_committed():
+    return _EventMatcher(TransactionCommitted)
+
+
+def transaction_rolled_back():
+    return _EventMatcher(TransactionRolledBack)
+
+
+def unload_completed(destination, fmt):
+    return _EventMatcher(UnloadCompleted, destination=destination, format=fmt)
+
+
+def unload_failed(destination, fmt):
+    return _EventMatcher(UnloadFailed, destination=destination, format=fmt)
+
+
+def unload_started(destination, fmt):
+    return _EventMatcher(UnloadStarted, destination=destination, format=fmt)

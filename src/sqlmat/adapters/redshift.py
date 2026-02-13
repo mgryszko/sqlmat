@@ -1,5 +1,6 @@
 from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
+    DataUnloaded,
     EventHandler,
     RowsDeleted,
     RowsInserted,
@@ -11,14 +12,14 @@ from sqlmat.core.events import (
     TransactionBegun,
     TransactionCommitted,
     TransactionRolledBack,
-    _noop_handler,
+    noop_handler,
 )
 
 
 class RedshiftAdapter(Adapter):
-    def __init__(self, conn, event_handler: EventHandler = _noop_handler):
+    def __init__(self, conn, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
-        self.conn = conn
+        self._conn = conn
 
     def execute(self, sql: str) -> None:
         self._emit(SqlExecuted(sql=sql))
@@ -153,16 +154,26 @@ class RedshiftAdapter(Adapter):
         self._emit(TransactionRolledBack(sql=sql))
         self._execute(sql)
 
+    def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
+        escaped_sql = sql.replace("'", "\\'")
+        parts = [f"UNLOAD ('{escaped_sql}')", f"TO '{destination}'", f"FORMAT AS {fmt.upper()}"]
+        if options:
+            parts.extend(options)
+        unload_sql = " ".join(parts)
+
+        self._execute(unload_sql)
+        self._emit(DataUnloaded(sql=unload_sql))
+
     def _execute(self, sql: str, params: list | None = None) -> None:
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
         cursor.execute(sql, params)
 
     def _fetchone(self, sql: str, params: list | None = None):
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
         cursor.execute(sql, params)
         return cursor.fetchone()
 
     def _fetchall(self, sql: str, params: list | None = None):
-        cursor = self.conn.cursor()
+        cursor = self._conn.cursor()
         cursor.execute(sql, params)
         return cursor.fetchall()

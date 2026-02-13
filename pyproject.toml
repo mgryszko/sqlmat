@@ -10,12 +10,25 @@ dependencies = [
     "jinja2",
 ]
 
+[project.optional-dependencies]
+test = [
+    "approvaltests",
+    "fsspec",
+    "polars",
+    "s3fs",
+]
+
 [dependency-groups]
 dev = [
+    "approvaltests",
+    "fsspec",
+    "polars",
     "pytest",
+    "pytest-xdist",
     "python-dotenv",
     "redshift-connector",
     "ruff",
+    "s3fs",
 ]
 
 [build-system]

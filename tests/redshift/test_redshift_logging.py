@@ -8,15 +8,15 @@ from event_matchers import (
     table_created,
     table_dropped,
     table_existence_checked,
+    table_transformation_completed,
+    table_transformation_failed,
+    table_transformation_started,
     transaction_begun,
     transaction_committed,
     transaction_rolled_back,
-    transformation_completed,
-    transformation_failed,
-    transformation_started,
 )
 
-from sqlmat import Executor, Transformation
+from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import RedshiftAdapter
 
 
@@ -31,12 +31,12 @@ def adapter(conn, events) -> RedshiftAdapter:
 
 
 @pytest.fixture
-def executor(adapter) -> Executor:
-    return Executor(adapter)
+def executor(adapter, events) -> Executor:
+    return Executor(adapter, event_handler=events.append)
 
 
 def test_full_refresh_events(executor, tgt_schema, events):
-    class Transform(Transformation):
+    class Transform(FullRefreshTableTransformation):
         target_schema = tgt_schema
         target_table = "result"
         sql = "select 1 as id"
@@ -44,30 +44,30 @@ def test_full_refresh_events(executor, tgt_schema, events):
     executor.run(Transform())
 
     assert events == [
-        transformation_started(tgt_schema, "result"),
+        table_transformation_started(tgt_schema, "result"),
         sql_rendered(tgt_schema, "result"),
         transaction_begun(),
         table_dropped(tgt_schema, "result"),
         table_created(tgt_schema, "result"),
         transaction_committed(),
-        transformation_completed(tgt_schema, "result"),
+        table_transformation_completed(tgt_schema, "result"),
     ]
 
 
 def test_delete_insert_events(executor, tgt_schema, tgt_table, events):
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    class Transform(Transformation):
+    class Transform(IncrementalTableTransformation):
         target_schema = tgt_schema
         target_table = tgt_table.name
-        materialization = "delete_insert"
+        strategy = "delete_insert"
         unique_key = "user_id"
         sql = "select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count"
 
     executor.run(Transform())
 
     assert events == [
-        transformation_started(tgt_schema, tgt_table.name),
+        table_transformation_started(tgt_schema, tgt_table.name),
         sql_rendered(tgt_schema, tgt_table.name),
         transaction_begun(),
         table_dropped(tgt_schema, f"{tgt_table.name}_tmp"),
@@ -77,24 +77,24 @@ def test_delete_insert_events(executor, tgt_schema, tgt_table, events):
         rows_inserted(tgt_schema, tgt_table.name),
         table_dropped(tgt_schema, f"{tgt_table.name}_tmp"),
         transaction_committed(),
-        transformation_completed(tgt_schema, tgt_table.name),
+        table_transformation_completed(tgt_schema, tgt_table.name),
     ]
 
 
 def test_merge_events(executor, tgt_schema, tgt_table, events):
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    class Transform(Transformation):
+    class Transform(IncrementalTableTransformation):
         target_schema = tgt_schema
         target_table = tgt_table.name
-        materialization = "merge"
+        strategy = "merge"
         unique_key = "user_id"
         sql = "select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count"
 
     executor.run(Transform())
 
     assert events == [
-        transformation_started(tgt_schema, tgt_table.name),
+        table_transformation_started(tgt_schema, tgt_table.name),
         sql_rendered(tgt_schema, tgt_table.name),
         transaction_begun(),
         table_dropped(tgt_schema, f"{tgt_table.name}_tmp"),
@@ -103,12 +103,12 @@ def test_merge_events(executor, tgt_schema, tgt_table, events):
         rows_merged(tgt_schema, tgt_table.name),
         table_dropped(tgt_schema, f"{tgt_table.name}_tmp"),
         transaction_committed(),
-        transformation_completed(tgt_schema, tgt_table.name),
+        table_transformation_completed(tgt_schema, tgt_table.name),
     ]
 
 
 def test_rollback_events(executor, tgt_schema, events):
-    class Transform(Transformation):
+    class Transform(FullRefreshTableTransformation):
         target_schema = tgt_schema
         target_table = "result"
         sql = "select * from nonexistent_table"
@@ -117,11 +117,11 @@ def test_rollback_events(executor, tgt_schema, events):
         executor.run(Transform())
 
     assert events == [
-        transformation_started(tgt_schema, "result"),
+        table_transformation_started(tgt_schema, "result"),
         sql_rendered(tgt_schema, "result"),
         transaction_begun(),
         table_dropped(tgt_schema, "result"),
         table_created(tgt_schema, "result"),
         transaction_rolled_back(),
-        transformation_failed(tgt_schema, "result"),
+        table_transformation_failed(tgt_schema, "result"),
     ]

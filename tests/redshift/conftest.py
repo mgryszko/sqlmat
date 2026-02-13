@@ -17,10 +17,21 @@ REDSHIFT_PASSWORD = os.environ.get("REDSHIFT_PASSWORD")
 REDSHIFT_SRC_SCHEMA_PREFIX = os.environ.get("REDSHIFT_SRC_SCHEMA_PREFIX")
 REDSHIFT_TGT_SCHEMA_PREFIX = os.environ.get("REDSHIFT_TGT_SCHEMA_PREFIX")
 
-pytestmark = pytest.mark.skipif(
-    not all([REDSHIFT_HOST, REDSHIFT_DATABASE, REDSHIFT_USER, REDSHIFT_PASSWORD, REDSHIFT_SRC_SCHEMA_PREFIX, REDSHIFT_TGT_SCHEMA_PREFIX]),
-    reason="Redshift environment variables not set",
-)
+REQUIRED_VARS = {
+    "REDSHIFT_HOST": REDSHIFT_HOST,
+    "REDSHIFT_DATABASE": REDSHIFT_DATABASE,
+    "REDSHIFT_USER": REDSHIFT_USER,
+    "REDSHIFT_PASSWORD": REDSHIFT_PASSWORD,
+    "REDSHIFT_SRC_SCHEMA_PREFIX": REDSHIFT_SRC_SCHEMA_PREFIX,
+    "REDSHIFT_TGT_SCHEMA_PREFIX": REDSHIFT_TGT_SCHEMA_PREFIX,
+}
+
+
+@pytest.fixture(autouse=True)
+def require_redshift_env():
+    missing = [name for name, value in REQUIRED_VARS.items() if not value]
+    if missing:
+        pytest.fail(f"Missing environment variables: {', '.join(missing)}")
 
 
 @pytest.fixture(scope="module")
