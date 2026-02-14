@@ -5,19 +5,20 @@ import redshift_connector
 
 from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import TARGET_TABLE_ALIAS, RedshiftAdapter
+from sqlmat.test import SchemaRegistry, Table
 
 
 @pytest.fixture
-def adapter(conn) -> RedshiftAdapter:
+def adapter(conn: redshift_connector.Connection) -> RedshiftAdapter:
     return RedshiftAdapter(conn)
 
 
 @pytest.fixture
-def executor(adapter) -> Executor:
+def executor(adapter: RedshiftAdapter) -> Executor:
     return Executor(adapter)
 
 
-def test_full_refresh_templated(conn, executor, registry, src_table, tgt_table):
+def test_full_refresh_templated(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
     class TemplatedTransform(FullRefreshTableTransformation):
@@ -43,7 +44,7 @@ def test_full_refresh_templated(conn, executor, registry, src_table, tgt_table):
     )
 
 
-def test_full_refresh_non_templated(conn, executor, registry, tgt_table):
+def test_full_refresh_non_templated(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, tgt_table: Table) -> None:
     class NonTemplatedTransform(FullRefreshTableTransformation):
         target_schema = tgt_table.schema
         target_table = tgt_table.name
@@ -54,7 +55,7 @@ def test_full_refresh_non_templated(conn, executor, registry, tgt_table):
     tgt_table.assert_table_equals([{"user_id": 42, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
 
 
-def test_delete_insert_single_unique_key(conn, executor, registry, src_table, tgt_table):
+def test_delete_insert_single_unique_key(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     class DeleteInsertTransform(IncrementalTableTransformation):
@@ -91,7 +92,7 @@ def test_delete_insert_single_unique_key(conn, executor, registry, src_table, tg
     )
 
 
-def test_delete_insert_composite_unique_key(conn, executor, registry, src_table, tgt_table):
+def test_delete_insert_composite_unique_key(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
@@ -135,7 +136,7 @@ def test_delete_insert_composite_unique_key(conn, executor, registry, src_table,
     )
 
 
-def test_delete_insert_with_incremental_predicates_single_string(conn, executor, registry, src_table, tgt_table):
+def test_delete_insert_with_incremental_predicates_single_string(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
@@ -160,7 +161,7 @@ def test_delete_insert_with_incremental_predicates_single_string(conn, executor,
     )
 
 
-def test_delete_insert_with_incremental_predicates_list(conn, executor, registry, src_table, tgt_table):
+def test_delete_insert_with_incremental_predicates_list(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
@@ -185,7 +186,7 @@ def test_delete_insert_with_incremental_predicates_list(conn, executor, registry
     )
 
 
-def test_delete_insert_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
+def test_delete_insert_target_table_does_not_exist(conn: redshift_connector.Connection, adapter: RedshiftAdapter, executor: Executor, src_table: Table, tgt_table: Table) -> None:
     cursor = conn.cursor()
     cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
@@ -210,7 +211,7 @@ def test_delete_insert_target_table_does_not_exist(conn, adapter, executor, src_
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_delete_insert_without_unique_key_raises_error(executor, tgt_schema, src_table):
+def test_delete_insert_without_unique_key_raises_error(executor: Executor, tgt_schema: str, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class DeleteInsertTransform(IncrementalTableTransformation):
@@ -223,7 +224,7 @@ def test_delete_insert_without_unique_key_raises_error(executor, tgt_schema, src
         executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
 
 
-def test_merge_single_unique_key(conn, executor, registry, src_table, tgt_table):
+def test_merge_single_unique_key(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     class MergeTransform(IncrementalTableTransformation):
@@ -260,7 +261,7 @@ def test_merge_single_unique_key(conn, executor, registry, src_table, tgt_table)
     )
 
 
-def test_merge_composite_unique_key(conn, executor, registry, src_table, tgt_table):
+def test_merge_composite_unique_key(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
@@ -304,7 +305,7 @@ def test_merge_composite_unique_key(conn, executor, registry, src_table, tgt_tab
     )
 
 
-def test_merge_with_incremental_predicates_single_string(conn, executor, registry, src_table, tgt_table):
+def test_merge_with_incremental_predicates_single_string(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
@@ -329,7 +330,7 @@ def test_merge_with_incremental_predicates_single_string(conn, executor, registr
     )
 
 
-def test_merge_with_incremental_predicates_list(conn, executor, registry, src_table, tgt_table):
+def test_merge_with_incremental_predicates_list(conn: redshift_connector.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
@@ -354,7 +355,7 @@ def test_merge_with_incremental_predicates_list(conn, executor, registry, src_ta
     )
 
 
-def test_merge_target_table_does_not_exist(conn, adapter, executor, src_table, tgt_table):
+def test_merge_target_table_does_not_exist(conn: redshift_connector.Connection, adapter: RedshiftAdapter, executor: Executor, src_table: Table, tgt_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class MergeTransform(IncrementalTableTransformation):
@@ -377,7 +378,7 @@ def test_merge_target_table_does_not_exist(conn, adapter, executor, src_table, t
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_merge_without_unique_key_raises_error(executor, src_table):
+def test_merge_without_unique_key_raises_error(executor: Executor, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class MergeTransform(IncrementalTableTransformation):
@@ -390,7 +391,7 @@ def test_merge_without_unique_key_raises_error(executor, src_table):
         executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
 
 
-def test_full_refresh_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+def test_full_refresh_rollback_on_error(conn: redshift_connector.Connection, adapter: RedshiftAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     class FailingTransform(FullRefreshTableTransformation):
@@ -405,7 +406,7 @@ def test_full_refresh_rollback_on_error(conn, adapter, executor, registry, tgt_t
     tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
 
 
-def test_delete_insert_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+def test_delete_insert_rollback_on_error(conn: redshift_connector.Connection, adapter: RedshiftAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     class FailingTransform(IncrementalTableTransformation):
@@ -423,7 +424,7 @@ def test_delete_insert_rollback_on_error(conn, adapter, executor, registry, tgt_
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_merge_rollback_on_error(conn, adapter, executor, registry, tgt_table):
+def test_merge_rollback_on_error(conn: redshift_connector.Connection, adapter: RedshiftAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     class FailingTransform(IncrementalTableTransformation):

@@ -13,6 +13,8 @@ from event_matchers import (
 
 from sqlmat import Executor, Unload
 from sqlmat.adapters import RedshiftAdapter
+from sqlmat.core.events import Event
+from sqlmat.test import SchemaRegistry, Table
 
 load_dotenv()
 
@@ -21,7 +23,7 @@ REDSHIFT_UNLOAD_IAM_ROLE = os.environ.get("REDSHIFT_UNLOAD_IAM_ROLE")
 
 
 @pytest.fixture(autouse=True)
-def require_unload_env():
+def require_unload_env() -> None:
     missing = [
         name
         for name, value in {"UNLOAD_S3_URI": UNLOAD_S3_URI, "REDSHIFT_UNLOAD_IAM_ROLE": REDSHIFT_UNLOAD_IAM_ROLE}.items()
@@ -32,17 +34,17 @@ def require_unload_env():
 
 
 @pytest.fixture
-def events() -> list:
+def events() -> list[Event]:
     return []
 
 
 @pytest.fixture
-def adapter(conn, events) -> RedshiftAdapter:
+def adapter(conn: redshift_connector.Connection, events: list[Event]) -> RedshiftAdapter:
     return RedshiftAdapter(conn, event_handler=events.append)
 
 
 @pytest.fixture
-def executor(adapter, events) -> Executor:
+def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
     return Executor(adapter, event_handler=events.append)
 
 
@@ -51,7 +53,7 @@ def unload_s3_uri(test_function_id: str) -> str:
     return f"{UNLOAD_S3_URI}/redshift_unload_{test_function_id}/"
 
 
-def test_unload_events(executor, registry, src_table, events, unload_s3_uri):
+def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: Table, events: list[Event], unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
     class ParquetUnload(Unload):
@@ -70,7 +72,7 @@ def test_unload_events(executor, registry, src_table, events, unload_s3_uri):
     ]
 
 
-def test_unload_error_events(executor, events, unload_s3_uri):
+def test_unload_error_events(executor: Executor, events: list[Event], unload_s3_uri: str) -> None:
     class BadUnload(Unload):
         sql = "select * from nonexistent_table"
         destination = unload_s3_uri

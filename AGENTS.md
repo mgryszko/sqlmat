@@ -82,6 +82,10 @@ uv run ruff format
 5. Adapter drops existing table (if exists)
 6. Adapter creates new table with rendered SQL
 
+### Coding conventions
+
+- **Type all functions and methods**: Every function and method (including test functions, fixtures, and helpers) must have type annotations for all parameters and the return type
+
 ### Key design decisions
 
 - **Instantiated transformations**: `executor.run()` accepts instances, not classes, giving users control over instantiation

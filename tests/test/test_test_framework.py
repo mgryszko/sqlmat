@@ -13,13 +13,13 @@ def conn() -> Generator[duckdb.DuckDBPyConnection]:
 
 
 @pytest.fixture
-def registry(conn) -> Generator[SchemaRegistry]:
+def registry(conn: duckdb.DuckDBPyConnection) -> Generator[SchemaRegistry]:
     r = SchemaRegistry(conn)
     yield r
     r.teardown()
 
 
-def test_insert_tuples(conn, registry):
+def test_insert_tuples(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
 
     table.insert([(1, "Alice"), (2, "Bob")])
@@ -30,7 +30,7 @@ def test_insert_tuples(conn, registry):
     )
 
 
-def test_insert_dicts(conn, registry):
+def test_insert_dicts(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]).create(registry)
 
     table.insert([{"id": 1, "name": "Alice", "age": 30}, {"id": 2, "name": "Bob", "age": 25}])
@@ -41,7 +41,7 @@ def test_insert_dicts(conn, registry):
     )
 
 
-def test_insert_dicts_with_defaults(conn, registry):
+def test_insert_dicts_with_defaults(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     columns = [("user_id", "integer"), ("event_date", "varchar"), ("event_count", "integer")]
     table = Table(conn, "main", "events", columns).create(registry)
 
@@ -59,7 +59,7 @@ def test_insert_dicts_with_defaults(conn, registry):
     )
 
 
-def test_insert_dicts_row_overrides_defaults(conn, registry):
+def test_insert_dicts_row_overrides_defaults(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     columns = [("user_id", "integer"), ("event_date", "varchar"), ("event_count", "integer")]
     table = Table(conn, "main", "events", columns).create(registry)
 
@@ -73,7 +73,7 @@ def test_insert_dicts_row_overrides_defaults(conn, registry):
     )
 
 
-def test_delete_all(conn, registry):
+def test_delete_all(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(1, "Alice"), (2, "Bob")])
 
@@ -82,7 +82,7 @@ def test_delete_all(conn, registry):
     table.assert_table_equals([])
 
 
-def test_delete_with_where(conn, registry):
+def test_delete_with_where(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(1, "Alice"), (2, "Bob"), (3, "Charlie")])
 
@@ -94,7 +94,7 @@ def test_delete_with_where(conn, registry):
     )
 
 
-def test_create_schema_with_prefix(conn):
+def test_create_schema_with_prefix(conn: duckdb.DuckDBPyConnection) -> None:
     registry = SchemaRegistry(conn)
     schema = registry.create_schema(prefix="staging")
 
@@ -107,7 +107,7 @@ def test_create_schema_with_prefix(conn):
     assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 
 
-def test_create_schema_without_prefix(conn):
+def test_create_schema_without_prefix(conn: duckdb.DuckDBPyConnection) -> None:
     registry = SchemaRegistry(conn)
     schema = registry.create_schema()
 
@@ -119,7 +119,7 @@ def test_create_schema_without_prefix(conn):
     assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 
 
-def test_assert_table_equals_without_order_by(conn, registry):
+def test_assert_table_equals_without_order_by(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(2, "Bob"), (1, "Alice")])
 
@@ -128,7 +128,7 @@ def test_assert_table_equals_without_order_by(conn, registry):
     )
 
 
-def test_assert_table_equals_subset_of_columns(conn, registry):
+def test_assert_table_equals_subset_of_columns(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]).create(registry)
     table.insert([(1, "Alice", 30), (2, "Bob", 25)])
 
@@ -139,7 +139,7 @@ def test_assert_table_equals_subset_of_columns(conn, registry):
     )
 
 
-def test_assert_table_equals_fails_on_mismatch(conn, registry):
+def test_assert_table_equals_fails_on_mismatch(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(1, "Alice"), (2, "Bob")])
 
@@ -147,14 +147,14 @@ def test_assert_table_equals_fails_on_mismatch(conn, registry):
         table.assert_table_equals([{"id": 1, "name": "Alice"}, {"id": 2, "name": "Charlie"}])
 
 
-def test_assert_table_contains_subset(conn, registry):
+def test_assert_table_contains_subset(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(1, "Alice"), (2, "Bob"), (3, "Charlie")])
 
     table.assert_table_contains([{"id": 1, "name": "Alice"}, {"id": 3, "name": "Charlie"}])
 
 
-def test_assert_table_contains_fails_when_row_missing(conn, registry):
+def test_assert_table_contains_fails_when_row_missing(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
     table = Table(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
     table.insert([(1, "Alice"), (2, "Bob")])
 

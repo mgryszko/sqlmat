@@ -18,24 +18,26 @@ from event_matchers import (
 
 from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import RedshiftAdapter
+from sqlmat.core.events import Event
+from sqlmat.test import Table
 
 
 @pytest.fixture
-def events() -> list:
+def events() -> list[Event]:
     return []
 
 
 @pytest.fixture
-def adapter(conn, events) -> RedshiftAdapter:
+def adapter(conn: redshift_connector.Connection, events: list[Event]) -> RedshiftAdapter:
     return RedshiftAdapter(conn, event_handler=events.append)
 
 
 @pytest.fixture
-def executor(adapter, events) -> Executor:
+def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
     return Executor(adapter, event_handler=events.append)
 
 
-def test_full_refresh_events(executor, tgt_schema, events):
+def test_full_refresh_events(executor: Executor, tgt_schema: str, events: list[Event]) -> None:
     class Transform(FullRefreshTableTransformation):
         target_schema = tgt_schema
         target_table = "result"
@@ -54,7 +56,7 @@ def test_full_refresh_events(executor, tgt_schema, events):
     ]
 
 
-def test_delete_insert_events(executor, tgt_schema, tgt_table, events):
+def test_delete_insert_events(executor: Executor, tgt_schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
     class Transform(IncrementalTableTransformation):
@@ -81,7 +83,7 @@ def test_delete_insert_events(executor, tgt_schema, tgt_table, events):
     ]
 
 
-def test_merge_events(executor, tgt_schema, tgt_table, events):
+def test_merge_events(executor: Executor, tgt_schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
     class Transform(IncrementalTableTransformation):
@@ -107,7 +109,7 @@ def test_merge_events(executor, tgt_schema, tgt_table, events):
     ]
 
 
-def test_rollback_events(executor, tgt_schema, events):
+def test_rollback_events(executor: Executor, tgt_schema: str, events: list[Event]) -> None:
     class Transform(FullRefreshTableTransformation):
         target_schema = tgt_schema
         target_table = "result"

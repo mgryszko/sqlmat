@@ -1,22 +1,24 @@
+import pathlib
+
 import duckdb
 import pytest
 
 from sqlmat import Executor, Unload
 from sqlmat.adapters import DuckDBAdapter
-from sqlmat.test import Files
+from sqlmat.test import Files, SchemaRegistry, Table
 
 
 @pytest.fixture
-def adapter(conn) -> DuckDBAdapter:
+def adapter(conn: duckdb.DuckDBPyConnection) -> DuckDBAdapter:
     return DuckDBAdapter(conn)
 
 
 @pytest.fixture
-def executor(adapter) -> Executor:
+def executor(adapter: DuckDBAdapter) -> Executor:
     return Executor(adapter)
 
 
-def test_unload_parquet(executor, registry, src_table, tmp_path):
+def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.parquet")
@@ -31,7 +33,7 @@ def test_unload_parquet(executor, registry, src_table, tmp_path):
     Files(output_path).approve_parquet(sort_columns=["user_id"])
 
 
-def test_unload_csv(executor, registry, src_table, tmp_path):
+def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.csv")
@@ -46,7 +48,7 @@ def test_unload_csv(executor, registry, src_table, tmp_path):
     Files(output_path).approve_csv(header=True, sort_columns=["user_id"])
 
 
-def test_unload_json(executor, registry, src_table, tmp_path):
+def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.json")
@@ -61,7 +63,7 @@ def test_unload_json(executor, registry, src_table, tmp_path):
     Files(output_path).approve_jsonl(sort_columns=["user_id"])
 
 
-def test_unload_json_with_gzip(executor, registry, src_table, tmp_path):
+def test_unload_json_with_gzip(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.json.gz")
@@ -77,7 +79,7 @@ def test_unload_json_with_gzip(executor, registry, src_table, tmp_path):
     Files(output_path).approve_jsonl(sort_columns=["user_id"])
 
 
-def test_unload_csv_with_gzip(executor, registry, src_table, tmp_path):
+def test_unload_csv_with_gzip(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.csv.gz")
@@ -93,7 +95,7 @@ def test_unload_csv_with_gzip(executor, registry, src_table, tmp_path):
     Files(output_path).approve_csv(header=True, sort_columns=["user_id"])
 
 
-def test_unload_csv_with_custom_options(executor, registry, src_table, tmp_path):
+def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.csv")
@@ -109,7 +111,7 @@ def test_unload_csv_with_custom_options(executor, registry, src_table, tmp_path)
     Files(output_path).approve_csv()
 
 
-def test_unload_error_on_invalid_sql(executor, tmp_path):
+def test_unload_error_on_invalid_sql(executor: Executor, tmp_path: pathlib.Path) -> None:
     output_path = str(tmp_path / "output.parquet")
 
     class BadUnload(Unload):

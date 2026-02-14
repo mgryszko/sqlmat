@@ -1,3 +1,5 @@
+import pathlib
+
 import duckdb
 import pytest
 from event_matchers import (
@@ -10,24 +12,26 @@ from event_matchers import (
 
 from sqlmat import Executor, Unload
 from sqlmat.adapters import DuckDBAdapter
+from sqlmat.core.events import Event
+from sqlmat.test import SchemaRegistry, Table
 
 
 @pytest.fixture
-def events() -> list:
+def events() -> list[Event]:
     return []
 
 
 @pytest.fixture
-def adapter(conn, events) -> DuckDBAdapter:
+def adapter(conn: duckdb.DuckDBPyConnection, events: list[Event]) -> DuckDBAdapter:
     return DuckDBAdapter(conn, event_handler=events.append)
 
 
 @pytest.fixture
-def executor(adapter, events) -> Executor:
+def executor(adapter: DuckDBAdapter, events: list[Event]) -> Executor:
     return Executor(adapter, event_handler=events.append)
 
 
-def test_unload_events(executor, registry, src_table, tmp_path, events):
+def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path, events: list[Event]) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
     output_path = str(tmp_path / "output.parquet")
@@ -47,7 +51,7 @@ def test_unload_events(executor, registry, src_table, tmp_path, events):
     ]
 
 
-def test_unload_error_events(executor, tmp_path, events):
+def test_unload_error_events(executor: Executor, tmp_path: pathlib.Path, events: list[Event]) -> None:
     output_path = str(tmp_path / "output.parquet")
 
     class BadUnload(Unload):
