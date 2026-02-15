@@ -25,9 +25,7 @@ REDSHIFT_UNLOAD_IAM_ROLE = os.environ.get("REDSHIFT_UNLOAD_IAM_ROLE")
 @pytest.fixture(autouse=True)
 def require_unload_env() -> None:
     missing = [
-        name
-        for name, value in {"UNLOAD_S3_URI": UNLOAD_S3_URI, "REDSHIFT_UNLOAD_IAM_ROLE": REDSHIFT_UNLOAD_IAM_ROLE}.items()
-        if not value
+        name for name, value in {"UNLOAD_S3_URI": UNLOAD_S3_URI, "REDSHIFT_UNLOAD_IAM_ROLE": REDSHIFT_UNLOAD_IAM_ROLE}.items() if not value
     ]
     if missing:
         pytest.fail(f"Missing environment variables: {', '.join(missing)}")

@@ -1,5 +1,8 @@
 from sqlmat.adapters.base import Adapter
 from sqlmat.core.events import (
+    CopyCompleted,
+    CopyFailed,
+    CopyStarted,
     EventHandler,
     SqlRendered,
     TransformationCompleted,
@@ -12,6 +15,7 @@ from sqlmat.core.events import (
 )
 from sqlmat.core.template import TemplateEngine
 from sqlmat.core.transformation import (
+    Copy,
     FullRefreshTableTransformation,
     IncrementalTableTransformation,
     Unload,
@@ -26,7 +30,7 @@ class Executor:
 
     def run(
         self,
-        operation: FullRefreshTableTransformation | IncrementalTableTransformation | Unload,
+        operation: FullRefreshTableTransformation | IncrementalTableTransformation | Unload | Copy,
         template_context: dict | None = None,
     ) -> None:
         if template_context is None:
@@ -38,6 +42,8 @@ class Executor:
             self._execute_table_transformation(operation, template_context)
         elif isinstance(operation, Unload):
             self._run_unload(operation, template_context)
+        elif isinstance(operation, Copy):
+            self._run_copy(operation)
 
     def _execute_table_transformation(
         self,
@@ -179,6 +185,29 @@ class Executor:
             self._emit(UnloadCompleted(destination, fmt))
         except Exception as e:
             self._emit(UnloadFailed(destination, fmt, e))
+            raise
+
+    def _run_copy(self, copy: Copy) -> None:
+        source = copy.source
+        schema = copy.target_schema
+        table = copy.target_table
+        fmt = copy.format
+        columns = copy.columns
+        options = copy.options
+
+        self._emit(CopyStarted(source, schema, table, fmt))
+        try:
+            self._adapter.begin_transaction()
+            try:
+                self._adapter.drop_table(schema, table)
+                self._adapter.copy_from(source, schema, table, fmt, columns, options)
+                self._adapter.commit()
+            except Exception:
+                self._adapter.rollback()
+                raise
+            self._emit(CopyCompleted(source, schema, table, fmt))
+        except Exception as e:
+            self._emit(CopyFailed(source, schema, table, fmt, e))
             raise
 
     def _normalize_predicates(self, predicates: str | list[str] | None) -> list[str] | None:

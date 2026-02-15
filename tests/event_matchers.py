@@ -1,6 +1,10 @@
 from typing import Any
 
 from sqlmat.core.events import (
+    CopyCompleted,
+    CopyFailed,
+    CopyStarted,
+    DataLoaded,
     DataUnloaded,
     RowsDeleted,
     RowsInserted,
@@ -42,11 +46,30 @@ class _EventMatcher:
         if self._event_type is UnloadFailed and "error" not in self._fields:
             if other.error is None:
                 return False
+        if self._event_type is CopyFailed and "error" not in self._fields:
+            if other.error is None:
+                return False
         return True
 
     def __repr__(self) -> str:
         fields = ", ".join(f"{k}={v!r}" for k, v in self._fields.items())
         return f"{self._event_type.__name__}({fields})"
+
+
+def copy_completed(source: str, schema: str, table: str, fmt: str) -> _EventMatcher:
+    return _EventMatcher(CopyCompleted, source=source, target_schema=schema, target_table=table, format=fmt)
+
+
+def copy_failed(source: str, schema: str, table: str, fmt: str) -> _EventMatcher:
+    return _EventMatcher(CopyFailed, source=source, target_schema=schema, target_table=table, format=fmt)
+
+
+def copy_started(source: str, schema: str, table: str, fmt: str) -> _EventMatcher:
+    return _EventMatcher(CopyStarted, source=source, target_schema=schema, target_table=table, format=fmt)
+
+
+def data_loaded() -> _EventMatcher:
+    return _EventMatcher(DataLoaded)
 
 
 def data_unloaded() -> _EventMatcher:

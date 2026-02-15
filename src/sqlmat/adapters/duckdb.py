@@ -1,5 +1,6 @@
 from sqlmat.adapters.base import SOURCE_TABLE_ALIAS, TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
+    DataLoaded,
     DataUnloaded,
     EventHandler,
     RowsDeleted,
@@ -143,12 +144,31 @@ class DuckDBAdapter(Adapter):
         self._emit(TransactionRolledBack(sql=sql))
         self._conn.execute(sql)
 
+    def copy_from(
+        self,
+        source: str,
+        schema: str,
+        table: str,
+        fmt: str,
+        columns: list[tuple[str, str]] | None = None,
+        options: list[str] | None = None,
+    ) -> None:
+        read_fn = {"parquet": "read_parquet", "csv": "read_csv", "json": "read_json"}[fmt]
+        args = [f"'{source}'"]
+        if options:
+            args.extend(options)
+        args_str = ", ".join(args)
+        full_table_name = f"{schema}.{table}"
+        sql = f"create table {full_table_name} as select * from {read_fn}({args_str})"
+        self._conn.execute(sql)
+        self._emit(DataLoaded(sql=sql))
+
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
-        option_parts = [f"FORMAT {fmt.upper()}"]
+        option_parts = [f"format {fmt.upper()}"]
         if options:
             option_parts.extend(options)
         options_str = ", ".join(option_parts)
-        copy_sql = f"COPY ({sql}) TO '{destination}' ({options_str})"
+        copy_sql = f"copy ({sql}) to '{destination}' ({options_str})"
 
         self._conn.execute(copy_sql)
         self._emit(DataUnloaded(sql=copy_sql))

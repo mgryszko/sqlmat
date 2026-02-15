@@ -1,5 +1,6 @@
 from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
+    DataLoaded,
     DataUnloaded,
     EventHandler,
     RowsDeleted,
@@ -156,13 +157,39 @@ class RedshiftAdapter(Adapter):
 
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
         escaped_sql = sql.replace("'", "\\'")
-        parts = [f"UNLOAD ('{escaped_sql}')", f"TO '{destination}'", f"FORMAT AS {fmt.upper()}"]
+        parts = [f"unload ('{escaped_sql}')", f"to '{destination}'", f"format as {fmt.upper()}"]
         if options:
             parts.extend(options)
         unload_sql = " ".join(parts)
 
         self._execute(unload_sql)
         self._emit(DataUnloaded(sql=unload_sql))
+
+    def copy_from(
+        self,
+        source: str,
+        schema: str,
+        table: str,
+        fmt: str,
+        columns: list[tuple[str, str]] | None = None,
+        options: list[str] | None = None,
+    ) -> None:
+        if columns is None:
+            raise ValueError("Redshift adapter requires columns for copy_from")
+
+        full_table_name = f"{schema}.{table}"
+        cols_sql = ", ".join(f"{name} {typ}" for name, typ in columns)
+        create_sql = f"create table {full_table_name} ({cols_sql})"
+        self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
+        self._execute(create_sql)
+
+        format_clause = {"parquet": "format as parquet", "csv": "csv", "json": "json 'auto'"}[fmt]
+        parts = [f"copy {full_table_name}", f"from '{source}'", format_clause]
+        if options:
+            parts.extend(options)
+        copy_sql = " ".join(parts)
+        self._execute(copy_sql)
+        self._emit(DataLoaded(sql=copy_sql))
 
     def _execute(self, sql: str, params: list | None = None) -> None:
         cursor = self._conn.cursor()

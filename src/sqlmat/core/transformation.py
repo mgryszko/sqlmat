@@ -27,3 +27,12 @@ class Unload:
     destination: str
     format: Literal["parquet", "csv", "json"]
     options: list[str] | None = None
+
+
+class Copy:
+    source: str
+    target_schema: str
+    target_table: str
+    format: Literal["parquet", "csv", "json"]
+    columns: list[tuple[str, str]] | None = None
+    options: list[str] | None = None

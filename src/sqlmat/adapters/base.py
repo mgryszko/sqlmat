@@ -68,5 +68,17 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
+    def copy_from(
+        self,
+        source: str,
+        schema: str,
+        table: str,
+        fmt: str,
+        columns: list[tuple[str, str]] | None = None,
+        options: list[str] | None = None,
+    ) -> None:
+        pass
+
+    @abstractmethod
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
         pass

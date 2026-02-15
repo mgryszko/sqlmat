@@ -13,6 +13,7 @@ sqlmat is a lightweight SQL transformation library inspired by dbt, focused on s
 **IMPORTANT**: All changes must be verified by running all tests before considering the work complete.
 
 - Use the testing framework from `sqlmat.test` (`SchemaRegistry`, `Table`, `ColumnSpec`). `SchemaRegistry` manages creation/teardown of test schemas and tracks created tables. `Table` provides helpers for creating tables, inserting rows, and asserting on table contents (`assert_table_equals`, `assert_table_contains`)
+- **Always use `Table.assert_table_equals` for table assertions** — never use raw cursor queries (`cursor.fetchall()`, `conn.execute(...).fetchall()`) to assert on table contents. For tables created by operations like Copy, create a `Table` object (without calling `.create()`) and use it for assertions
 - Use plain functions, not test classes
 - Prefer asserting on complete objects rather than individual properties
 - Verify behavior through the public API (`Executor`, `Transformation`, `DuckDBAdapter`), not internal implementation details
@@ -85,6 +86,7 @@ uv run ruff format
 ### Coding conventions
 
 - **Type all functions and methods**: Every function and method (including test functions, fixtures, and helpers) must have type annotations for all parameters and the return type
+- **SQL keywords, types, and function names**: Always use lowercase for SQL keywords (`select`, `from`, `create table`), data types (`integer`, `varchar`), and function names (`read_parquet`, `lower`). This applies to both production code and tests. Exception: user-provided options and format specifiers may use uppercase when required by the database (e.g., `fmt.upper()` for format values)
 
 ### Key design decisions
 
