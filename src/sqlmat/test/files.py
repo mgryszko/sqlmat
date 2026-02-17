@@ -3,21 +3,8 @@ import io
 import json
 from pathlib import Path
 
-from approvaltests import Namer, get_default_namer, verify
-from approvaltests.namer import NamerFactory
+from approvaltests import verify, Options
 from fsspec import open_files
-
-
-class ExtensionNamer(Namer):
-    def __init__(self, base_namer: Namer, extension: str):
-        self.base_namer = base_namer
-        self.extension = extension
-
-    def get_approved_filename(self, base_name: str | None = None) -> str:
-        return self.base_namer.get_approved_filename(base_name).replace(".approved.txt", f".approved.{self.extension}")
-
-    def get_received_filename(self, base_name: str | None = None) -> str:
-        return self.base_namer.get_received_filename(base_name).replace(".received.txt", f".received.{self.extension}")
 
 
 class Files:
@@ -47,8 +34,7 @@ class Files:
             received.sort(key=lambda row: tuple(row[col] for col in sort_columns))
         normalized_received = json.dumps(received, indent=2, sort_keys=True)
 
-        namer = ExtensionNamer(get_default_namer(), "json")
-        verify(normalized_received, options=NamerFactory.with_parameters().with_namer(namer))
+        verify(normalized_received, options=Options().for_file.with_extension("json"))
 
     def approve_csv(self, header: bool = False, sort_columns: list[str] | None = None) -> None:
         if header:
@@ -56,8 +42,7 @@ class Files:
         else:
             received = self._read()
 
-        namer = ExtensionNamer(get_default_namer(), "csv")
-        verify(received, options=NamerFactory.with_parameters().with_namer(namer))
+        verify(received, options=Options().for_file.with_extension("csv"))
 
     def _read_csv_with_header(self, sort_columns: list[str] | None = None) -> str:
         rows = []

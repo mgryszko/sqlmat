@@ -62,6 +62,11 @@ class DuckDBAdapter(Adapter):
         self._emit(TableDropped(schema=schema, table=table, sql=drop_sql))
         self._conn.execute(drop_sql)
 
+    def rename_table(self, schema: str, old_name: str, new_name: str) -> None:
+        rename_sql = f"alter table {schema}.{old_name} rename to {new_name}"
+        self._emit(SqlExecuted(sql=rename_sql))
+        self._conn.execute(rename_sql)
+
     def delete_with_using(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:

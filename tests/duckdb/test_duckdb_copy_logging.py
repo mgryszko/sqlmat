@@ -35,36 +35,34 @@ def executor(adapter: DuckDBAdapter, events: list[Event]) -> Executor:
     return Executor(adapter, event_handler=events.append)
 
 
-def test_copy_events(executor: Executor, registry: SchemaRegistry, tgt_schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
     path = str(tmp_path / "data.parquet")
     pl.DataFrame([{"user_id": 1, "event_count": 5}]).write_parquet(path)
 
     class ParquetCopy(Copy):
         source = path
-        target_schema = tgt_schema
+        target_schema = schema
         target_table = "imported"
         format = "parquet"
 
     executor.run(ParquetCopy())
 
     assert events == [
-        copy_started(path, tgt_schema, "imported", "parquet"),
+        copy_started(path, schema, "imported", "parquet"),
         transaction_begun(),
-        table_dropped(tgt_schema, "imported"),
+        table_dropped(schema, "imported"),
         data_loaded(),
         transaction_committed(),
-        copy_completed(path, tgt_schema, "imported", "parquet"),
+        copy_completed(path, schema, "imported", "parquet"),
     ]
 
 
-def test_copy_error_events(
-    executor: Executor, registry: SchemaRegistry, tgt_schema: str, tmp_path: pathlib.Path, events: list[Event]
-) -> None:
+def test_copy_error_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
     missing_path = str(tmp_path / "nonexistent.parquet")
 
     class MissingFileCopy(Copy):
         source = missing_path
-        target_schema = tgt_schema
+        target_schema = schema
         target_table = "imported"
         format = "parquet"
 
@@ -72,9 +70,9 @@ def test_copy_error_events(
         executor.run(MissingFileCopy())
 
     assert events == [
-        copy_started(missing_path, tgt_schema, "imported", "parquet"),
+        copy_started(missing_path, schema, "imported", "parquet"),
         transaction_begun(),
-        table_dropped(tgt_schema, "imported"),
+        table_dropped(schema, "imported"),
         transaction_rolled_back(),
-        copy_failed(missing_path, tgt_schema, "imported", "parquet"),
+        copy_failed(missing_path, schema, "imported", "parquet"),
     ]

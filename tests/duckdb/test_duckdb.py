@@ -224,11 +224,11 @@ def test_delete_insert_target_table_does_not_exist(
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_delete_insert_without_unique_key_raises_error(executor: Executor, tgt_schema: str, src_table: Table) -> None:
+def test_delete_insert_without_unique_key_raises_error(executor: Executor, schema: str, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_schema
+        target_schema = schema
         target_table = "bad_incremental"
         strategy = "delete_insert"
         sql = "select user_id, event_date, event_count from {{ source_table }}"

@@ -112,7 +112,7 @@ class Executor:
             self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
             if not self._adapter.table_exists(target_schema, target_table):
-                self._adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self._adapter.rename_table(target_schema, temp_table, target_table)
                 self._adapter.commit()
                 return
 
@@ -153,7 +153,7 @@ class Executor:
             self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
 
             if not self._adapter.table_exists(target_schema, target_table):
-                self._adapter.execute(f"alter table {temp_table_full} rename to {target_table}")
+                self._adapter.rename_table(target_schema, temp_table, target_table)
                 self._adapter.commit()
                 return
 

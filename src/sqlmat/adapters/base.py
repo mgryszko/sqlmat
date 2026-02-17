@@ -34,6 +34,10 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
+    def rename_table(self, schema: str, old_name: str, new_name: str) -> None:
+        pass
+
+    @abstractmethod
     def delete_with_using(
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:

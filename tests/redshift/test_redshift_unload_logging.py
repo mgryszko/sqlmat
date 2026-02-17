@@ -1,8 +1,6 @@
-import os
-
 import pytest
 import redshift_connector
-from dotenv import load_dotenv
+from env import RedshiftEnv
 from event_matchers import (
     data_unloaded,
     sql_rendered,
@@ -15,20 +13,6 @@ from sqlmat import Executor, Unload
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import SchemaRegistry, Table
-
-load_dotenv()
-
-UNLOAD_S3_URI = os.environ.get("UNLOAD_S3_URI")
-REDSHIFT_UNLOAD_IAM_ROLE = os.environ.get("REDSHIFT_UNLOAD_IAM_ROLE")
-
-
-@pytest.fixture(autouse=True)
-def require_unload_env() -> None:
-    missing = [
-        name for name, value in {"UNLOAD_S3_URI": UNLOAD_S3_URI, "REDSHIFT_UNLOAD_IAM_ROLE": REDSHIFT_UNLOAD_IAM_ROLE}.items() if not value
-    ]
-    if missing:
-        pytest.fail(f"Missing environment variables: {', '.join(missing)}")
 
 
 @pytest.fixture
@@ -47,18 +31,20 @@ def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
 
 
 @pytest.fixture
-def unload_s3_uri(test_function_id: str) -> str:
-    return f"{UNLOAD_S3_URI}/redshift_unload_{test_function_id}/"
+def unload_s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
+    return f"{redshift_env.unload_s3_uri}/redshift_unload_{test_function_id}/"
 
 
-def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: Table, events: list[Event], unload_s3_uri: str) -> None:
+def test_unload_events(
+    executor: Executor, registry: SchemaRegistry, src_table: Table, events: list[Event], unload_s3_uri: str, redshift_env: RedshiftEnv
+) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
     class ParquetUnload(Unload):
         sql = "select * from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
-        options = [f"IAM_ROLE '{REDSHIFT_UNLOAD_IAM_ROLE}'"]
+        options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
 
     executor.run(ParquetUnload(), template_context={"source_table": src_table.qualified_name})
 
@@ -70,12 +56,12 @@ def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: 
     ]
 
 
-def test_unload_error_events(executor: Executor, events: list[Event], unload_s3_uri: str) -> None:
+def test_unload_error_events(executor: Executor, events: list[Event], unload_s3_uri: str, redshift_env: RedshiftEnv) -> None:
     class BadUnload(Unload):
         sql = "select * from nonexistent_table"
         destination = unload_s3_uri
         format = "parquet"
-        options = [f"IAM_ROLE '{REDSHIFT_UNLOAD_IAM_ROLE}'"]
+        options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
 
     with pytest.raises(redshift_connector.error.ProgrammingError):
         executor.run(BadUnload())

@@ -729,6 +729,22 @@ wheels = [
 ]
 
 [[package]]
+name = "pyathena"
+version = "3.27.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "fsspec" },
+    { name = "python-dateutil" },
+    { name = "tenacity" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/4f/e29c4fca317ec887f0abcc19043cf712cebd8b53f5edb1d3b1a58abf6604/pyathena-3.27.2.tar.gz", hash = "sha256:0994bb3600aeace81435ad75171a92911c5c042e2d57ee7420541a59954f663e", size = 114574, upload-time = "2026-02-15T08:21:21.081Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/76/d410f2a2cabdbc5c33f2c513d04ba8a095f19033161274f2620143fddd91/pyathena-3.27.2-py3-none-any.whl", hash = "sha256:e795dd6d157bc29b5ab47caeee0babc29b9dfd786ea787f9210eac9f185053c6", size = 153582, upload-time = "2026-02-15T08:21:19.219Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -951,6 +967,7 @@ dev = [
     { name = "approvaltests" },
     { name = "fsspec" },
     { name = "polars" },
+    { name = "pyathena" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "python-dotenv" },
@@ -975,12 +992,22 @@ dev = [
     { name = "approvaltests" },
     { name = "fsspec" },
     { name = "polars" },
+    { name = "pyathena" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "python-dotenv" },
     { name = "redshift-connector" },
     { name = "ruff" },
     { name = "s3fs" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
 ]
 
 [[package]]

@@ -10,7 +10,7 @@ sqlmat is a lightweight SQL transformation library inspired by dbt, focused on s
 
 ### Testing
 
-**IMPORTANT**: All changes must be verified by running all tests before considering the work complete.
+**IMPORTANT**: All changes must be verified by running all tests (`uv run pytest -n auto`) before considering the work complete. Only run a single test file or a specific test when the change is very localized and unlikely to affect other parts of the codebase.
 
 - Use the testing framework from `sqlmat.test` (`SchemaRegistry`, `Table`, `ColumnSpec`). `SchemaRegistry` manages creation/teardown of test schemas and tracks created tables. `Table` provides helpers for creating tables, inserting rows, and asserting on table contents (`assert_table_equals`, `assert_table_contains`)
 - **Always use `Table.assert_table_equals` for table assertions** — never use raw cursor queries (`cursor.fetchall()`, `conn.execute(...).fetchall()`) to assert on table contents. For tables created by operations like Copy, create a `Table` object (without calling `.create()`) and use it for assertions

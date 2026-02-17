@@ -1,26 +1,18 @@
 import csv
 import json
-import os
 import pathlib
 
 import polars as pl
 import pytest
+from env import RedshiftEnv
 from fsspec import open as fsspec_open
 
 from sqlmat.test import Files
 
-UNLOAD_S3_URI = os.environ.get("UNLOAD_S3_URI")
-
-
-@pytest.fixture(autouse=True)
-def require_s3_env() -> None:
-    if not UNLOAD_S3_URI:
-        pytest.fail("Missing environment variable: UNLOAD_S3_URI")
-
 
 @pytest.fixture
-def s3_uri(test_function_id: str) -> str:
-    return f"{UNLOAD_S3_URI}/files-approvals-{test_function_id}/"
+def s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
+    return f"{redshift_env.unload_s3_uri}/files-approvals-{test_function_id}/"
 
 
 FIELDNAMES = ["user_id", "event_date", "event_count"]

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 from sqlmat.test.schema_registry import SchemaRegistry
 
 type ColumnSpec = list[tuple[str, str]]
 type Row = tuple | dict[str, object]
 
 
-class Table:
+class Table(ABC):
     def __init__(self, conn, schema: str, name: str, columns: ColumnSpec):
         self._conn = conn
         self._schema = schema
@@ -25,27 +27,13 @@ class Table:
     def qualified_name(self) -> str:
         return f"{self._schema}.{self._name}"
 
+    @abstractmethod
     def create(self, registry: SchemaRegistry) -> Table:
-        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
-        self._conn.cursor().execute(f"create table {self.qualified_name} ({cols})")
-        registry.register(self._schema, self._name)
-        return self
+        pass
 
+    @abstractmethod
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
-        for row in rows:
-            cursor = self._conn.cursor()
-            if isinstance(row, tuple):
-                placeholders = ", ".join("?" for _ in row)
-                sql = f"insert into {self.qualified_name} values ({placeholders})"
-                cursor.execute(sql, list(row))
-            else:
-                merged = {**(defaults or {}), **row}
-                column_names = [name for name, _ in self._columns]
-                col_list = ", ".join(column_names)
-                placeholders = ", ".join("?" for _ in column_names)
-                values = [merged[c] for c in column_names]
-                sql = f"insert into {self.qualified_name} ({col_list}) values ({placeholders})"
-                cursor.execute(sql, values)
+        pass
 
     def delete(self, where: str | None = None) -> None:
         sql = f"delete from {self.qualified_name}"
@@ -85,3 +73,98 @@ class Table:
         if order_by:
             return lambda row: tuple(row[col] for col in order_by)
         return lambda row: tuple(row.values())
+
+
+class DuckDBTable(Table):
+    def create(self, registry: SchemaRegistry) -> DuckDBTable:
+        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
+        self._conn.cursor().execute(f"create table {self.qualified_name} ({cols})")
+        registry.register(self._schema, self._name)
+        return self
+
+    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+        _insert_positional_params(
+            conn=self._conn,
+            qualified_table_name=self.qualified_name,
+            rows=rows,
+            defaults=defaults,
+            columns=self._columns,
+            placeholder="?",
+        )
+
+
+class RedshiftTable(Table):
+    def create(self, registry: SchemaRegistry) -> RedshiftTable:
+        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
+        self._conn.cursor().execute(f"create table {self.qualified_name} ({cols})")
+        registry.register(self._schema, self._name)
+        return self
+
+    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+        _insert_positional_params(
+            conn=self._conn,
+            qualified_table_name=self.qualified_name,
+            rows=rows,
+            defaults=defaults,
+            columns=self._columns,
+            placeholder="%s",
+        )
+
+
+class AthenaTable(Table):
+    def __init__(self, conn, schema: str, name: str, columns: ColumnSpec, s3_table_base_uri: str):
+        super().__init__(conn, schema, name, columns)
+        self._s3_table_base_uri = s3_table_base_uri
+
+    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+        _insert_named_params(
+            conn=self._conn,
+            qualified_table_name=self.qualified_name,
+            rows=rows,
+            defaults=defaults,
+            columns=self._columns,
+        )
+
+    def create(self, registry: SchemaRegistry) -> AthenaTable:
+        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
+        location = f"{self._s3_table_base_uri}/{self._name}/"
+        sql = f"create table {self.qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
+        self._conn.cursor().execute(sql)
+        registry.register(self._schema, self._name)
+        return self
+
+
+def _insert_positional_params(
+    conn,
+    qualified_table_name: str,
+    rows: list[tuple | dict[str, object]],
+    defaults: dict[str, object] | None,
+    columns: ColumnSpec,
+    placeholder: str,
+):
+    for row in rows:
+        cursor = conn.cursor()
+        if isinstance(row, tuple):
+            placeholders = ", ".join(placeholder for _ in row)
+            sql = f"insert into {qualified_table_name} values ({placeholders})"
+            cursor.execute(sql, list(row))
+        else:
+            merged = {**(defaults or {}), **row}
+            column_names = [name for name, _ in columns]
+            col_list = ", ".join(column_names)
+            placeholders = ", ".join(placeholder for _ in column_names)
+            values = [merged[c] for c in column_names]
+            sql = f"insert into {qualified_table_name} ({col_list}) values ({placeholders})"
+            cursor.execute(sql, values)
+
+
+def _insert_named_params(conn, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: ColumnSpec) -> None:
+    column_names = [name for name, _ in columns]
+    placeholders = ", ".join(f"%({name})s" for name in column_names)
+    sql = f"insert into {qualified_table_name} ({', '.join(column_names)}) values ({placeholders})"
+    for row in rows:
+        if isinstance(row, tuple):
+            values = dict(zip(column_names, row, strict=True))
+        else:
+            values = {**(defaults or {}), **row}
+        conn.cursor().execute(sql, values)

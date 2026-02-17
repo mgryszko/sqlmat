@@ -1,7 +1,5 @@
 from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
-    DataLoaded,
-    DataUnloaded,
     EventHandler,
     RowsDeleted,
     RowsInserted,
@@ -17,10 +15,11 @@ from sqlmat.core.events import (
 )
 
 
-class RedshiftAdapter(Adapter):
-    def __init__(self, conn, event_handler: EventHandler = noop_handler):
+class AthenaAdapter(Adapter):
+    def __init__(self, conn, s3_table_base_uri: str, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
         self._conn = conn
+        self._s3_table_base_uri = s3_table_base_uri
 
     def execute(self, sql: str) -> None:
         self._emit(SqlExecuted(sql=sql))
@@ -30,8 +29,8 @@ class RedshiftAdapter(Adapter):
         sql = """
             select count(*)
             from information_schema.tables
-            where lower(table_schema) = lower(%s)
-              and lower(table_name) = lower(%s)
+            where lower(table_schema) = lower(?)
+              and lower(table_name) = lower(?)
             """
         self._emit(TableExistenceChecked(schema=schema, table=table, sql=sql))
         result = self._fetchone(sql, [schema, table])
@@ -42,8 +41,8 @@ class RedshiftAdapter(Adapter):
             """
             select column_name
             from information_schema.columns
-            where lower(table_schema) = lower(%s)
-              and lower(table_name) = lower(%s)
+            where lower(table_schema) = lower(?)
+              and lower(table_name) = lower(?)
             order by ordinal_position
             """,
             [schema, table],
@@ -51,8 +50,12 @@ class RedshiftAdapter(Adapter):
         return [row[0] for row in result]
 
     def create_table_as(self, schema: str, table: str, sql: str) -> None:
-        full_table_name = f"{schema}.{table}"
-        create_sql = f"create table {full_table_name} as {sql}"
+        location = f"{self._s3_table_base_uri}/{table}/"
+        create_sql = (
+            f"create table {schema}.{table}"
+            f" with (table_type = 'ICEBERG', is_external = false, location = '{location}', format = 'PARQUET')"
+            f" as {sql}"
+        )
         self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
         self._execute(create_sql)
 
@@ -63,7 +66,7 @@ class RedshiftAdapter(Adapter):
         self._execute(drop_sql)
 
     def rename_table(self, schema: str, old_name: str, new_name: str) -> None:
-        rename_sql = f"alter table {schema}.{old_name} rename to {new_name}"
+        rename_sql = f"alter table {schema}.{old_name} rename to {schema}.{new_name}"
         self._emit(SqlExecuted(sql=rename_sql))
         self._execute(rename_sql)
 
@@ -71,16 +74,16 @@ class RedshiftAdapter(Adapter):
         self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
-        join_conditions = " and ".join([f"{temp_table}.{key} = {full_target}.{key}" for key in unique_keys])
+        keys_tuple = ", ".join(unique_keys)
+        subquery_keys = ", ".join(unique_keys)
 
-        where_clause = join_conditions
+        where_clause = f"({keys_tuple}) in (select {subquery_keys} from {temp_table})"
         if predicates:
             predicate_conditions = " and ".join(self._resolve_predicates(predicates, full_target))
-            where_clause = f"{join_conditions} and {predicate_conditions}"
+            where_clause = f"{where_clause} and {predicate_conditions}"
 
         delete_sql = f"""
             delete from {full_target}
-            using {temp_table}
             where {where_clause}
         """
         self._emit(RowsDeleted(schema=target_schema, table=target_table, sql=delete_sql))
@@ -91,7 +94,7 @@ class RedshiftAdapter(Adapter):
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
 
-        where_clause = f"({full_target}.{unique_key}) in (select ({unique_key}) from {temp_table})"
+        where_clause = f"({unique_key}) in (select ({unique_key}) from {temp_table})"
         if predicates:
             predicate_conditions = " and ".join(self._resolve_predicates(predicates, full_target))
             where_clause = f"{where_clause} and {predicate_conditions}"
@@ -146,29 +149,13 @@ class RedshiftAdapter(Adapter):
         return [p.replace(f"{TARGET_TABLE_ALIAS}.", f"{full_target}.") for p in predicates]
 
     def begin_transaction(self) -> None:
-        sql = "begin transaction"
-        self._emit(TransactionBegun(sql=sql))
-        self._execute(sql)
+        self._emit(TransactionBegun(sql="-- no-op"))
 
     def commit(self) -> None:
-        sql = "commit"
-        self._emit(TransactionCommitted(sql=sql))
-        self._execute(sql)
+        self._emit(TransactionCommitted(sql="-- no-op"))
 
     def rollback(self) -> None:
-        sql = "rollback"
-        self._emit(TransactionRolledBack(sql=sql))
-        self._execute(sql)
-
-    def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
-        escaped_sql = sql.replace("'", "\\'")
-        parts = [f"unload ('{escaped_sql}')", f"to '{destination}'", f"format as {fmt.upper()}"]
-        if options:
-            parts.extend(options)
-        unload_sql = " ".join(parts)
-
-        self._execute(unload_sql)
-        self._emit(DataUnloaded(sql=unload_sql))
+        self._emit(TransactionRolledBack(sql="-- no-op"))
 
     def copy_from(
         self,
@@ -179,33 +166,21 @@ class RedshiftAdapter(Adapter):
         columns: list[tuple[str, str]] | None = None,
         options: list[str] | None = None,
     ) -> None:
-        if columns is None:
-            raise ValueError("Redshift adapter requires columns for copy_from")
+        raise NotImplementedError
 
-        full_table_name = f"{schema}.{table}"
-        cols_sql = ", ".join(f"{name} {typ}" for name, typ in columns)
-        create_sql = f"create table {full_table_name} ({cols_sql})"
-        self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
-        self._execute(create_sql)
-
-        format_clause = {"parquet": "format as parquet", "csv": "csv", "json": "json 'auto'"}[fmt]
-        parts = [f"copy {full_table_name}", f"from '{source}'", format_clause]
-        if options:
-            parts.extend(options)
-        copy_sql = " ".join(parts)
-        self._execute(copy_sql)
-        self._emit(DataLoaded(sql=copy_sql))
+    def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
+        raise NotImplementedError
 
     def _execute(self, sql: str, params: list | None = None) -> None:
         cursor = self._conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql, params, paramstyle="qmark")
 
     def _fetchone(self, sql: str, params: list | None = None):
         cursor = self._conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql, params, paramstyle="qmark")
         return cursor.fetchone()
 
     def _fetchall(self, sql: str, params: list | None = None):
         cursor = self._conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql, params, paramstyle="qmark")
         return cursor.fetchall()

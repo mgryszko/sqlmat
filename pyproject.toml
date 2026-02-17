@@ -26,6 +26,7 @@ dev = [
     "pytest",
     "pytest-xdist",
     "python-dotenv",
+    "pyathena",
     "redshift-connector",
     "ruff",
     "s3fs",
