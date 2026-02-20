@@ -23,6 +23,7 @@ dev = [
     "approvaltests",
     "fsspec",
     "polars",
+    "psycopg",
     "pytest",
     "pytest-xdist",
     "python-dotenv",
@@ -30,6 +31,7 @@ dev = [
     "redshift-connector",
     "ruff",
     "s3fs",
+    "testcontainers[postgres]",
 ]
 
 [build-system]

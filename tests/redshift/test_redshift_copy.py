@@ -7,8 +7,6 @@ from sqlmat import Copy, Executor
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.test import RedshiftTable, SchemaRegistry
 
-COLUMNS = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]
-
 
 @pytest.fixture
 def adapter(conn: redshift_connector.Connection) -> RedshiftAdapter:
@@ -24,6 +22,8 @@ def executor(adapter: RedshiftAdapter) -> Executor:
 def copy_s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
     return f"{redshift_env.copy_s3_uri}/redshift-copy-{test_function_id}/"
 
+
+COLUMNS = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]
 
 PARQUET_ROWS = [
     {"user_id": 1, "event_date": "2024-01-01", "event_count": 5},

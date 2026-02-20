@@ -3,7 +3,7 @@ import io
 import json
 from pathlib import Path
 
-from approvaltests import verify, Options
+from approvaltests import Options, verify
 from fsspec import open_files
 
 

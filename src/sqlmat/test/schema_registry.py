@@ -4,7 +4,7 @@ from uuid import uuid4
 class SchemaRegistry:
     def __init__(self, conn):
         self._conn = conn
-        self._created_tables: list[tuple[str, str]] = []
+        self._created_tables: list[str] = []
         self._created_schemas: list[str] = []
 
     def create_schema(self, prefix: str | None = None) -> str:
@@ -14,11 +14,11 @@ class SchemaRegistry:
         self._created_schemas.append(name)
         return name
 
-    def register(self, schema: str, name: str) -> None:
-        self._created_tables.append((schema, name))
+    def register(self, qualified_name: str) -> None:
+        self._created_tables.append(qualified_name)
 
     def teardown(self) -> None:
-        for schema, name in reversed(self._created_tables):
-            self._conn.cursor().execute(f"drop table if exists {schema}.{name}")
+        for qualified_name in reversed(self._created_tables):
+            self._conn.cursor().execute(f"drop table if exists {qualified_name}")
         for schema in reversed(self._created_schemas):
             self._conn.cursor().execute(f"drop schema if exists {schema} cascade")

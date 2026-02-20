@@ -65,7 +65,8 @@ class Table(ABC):
 
     def _fetch_as_dicts(self, columns: list[str] | None = None) -> list[dict[str, object]]:
         cols = columns if columns else [name for name, _ in self._columns]
-        cursor = self._conn.cursor().execute(f"select {', '.join(cols)} from {self.qualified_name}")
+        cursor = self._conn.cursor()
+        cursor.execute(f"select {', '.join(cols)} from {self.qualified_name}")
         return [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
 
     @staticmethod
@@ -77,9 +78,7 @@ class Table(ABC):
 
 class DuckDBTable(Table):
     def create(self, registry: SchemaRegistry) -> DuckDBTable:
-        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
-        self._conn.cursor().execute(f"create table {self.qualified_name} ({cols})")
-        registry.register(self._schema, self._name)
+        _create_native_table(conn=self._conn, table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
@@ -95,9 +94,23 @@ class DuckDBTable(Table):
 
 class RedshiftTable(Table):
     def create(self, registry: SchemaRegistry) -> RedshiftTable:
-        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
-        self._conn.cursor().execute(f"create table {self.qualified_name} ({cols})")
-        registry.register(self._schema, self._name)
+        _create_native_table(conn=self._conn, table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
+        return self
+
+    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+        _insert_positional_params(
+            conn=self._conn,
+            qualified_table_name=self.qualified_name,
+            rows=rows,
+            defaults=defaults,
+            columns=self._columns,
+            placeholder="%s",
+        )
+
+
+class PostgresTable(Table):
+    def create(self, registry: SchemaRegistry) -> PostgresTable:
+        _create_native_table(conn=self._conn, table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
@@ -126,12 +139,27 @@ class AthenaTable(Table):
         )
 
     def create(self, registry: SchemaRegistry) -> AthenaTable:
-        cols = ", ".join(f"{name} {typ}" for name, typ in self._columns)
-        location = f"{self._s3_table_base_uri}/{self._name}/"
-        sql = f"create table {self.qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
-        self._conn.cursor().execute(sql)
-        registry.register(self._schema, self._name)
+        _create_iceberg_table(
+            conn=self._conn,
+            table_qualified_name=self.qualified_name,
+            columns=self._columns,
+            location=f"{self._s3_table_base_uri}/{self._name}/",
+            registry=registry,
+        )
         return self
+
+
+def _create_native_table(conn, table_qualified_name: str, columns: ColumnSpec, registry: SchemaRegistry) -> None:
+    cols = ", ".join(f"{name} {typ}" for name, typ in columns)
+    conn.cursor().execute(f"create table {table_qualified_name} ({cols})")
+    registry.register(table_qualified_name)
+
+
+def _create_iceberg_table(conn, table_qualified_name: str, columns: ColumnSpec, location: str, registry: SchemaRegistry) -> None:
+    cols = ", ".join(f"{name} {typ}" for name, typ in columns)
+    sql = f"create table {table_qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
+    conn.cursor().execute(sql)
+    registry.register(table_qualified_name)
 
 
 def _insert_positional_params(
