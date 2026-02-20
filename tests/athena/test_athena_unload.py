@@ -1,0 +1,79 @@
+import pyathena
+import pytest
+from env import AthenaEnv
+
+from sqlmat import Executor, Unload
+from sqlmat.test import AthenaTable, Files, SchemaRegistry
+from sqlmat.test.table import ColumnSpec
+
+
+@pytest.fixture
+def unload_s3_uri(athena_env: AthenaEnv, test_function_id: str) -> str:
+    return f"{athena_env.unload_s3_uri}/athena-unload-{test_function_id}/"
+
+
+COLUMNS: ColumnSpec = [("user_id", "int"), ("event_date", "string"), ("event_count", "int")]
+
+
+@pytest.fixture
+def src_table(conn: pyathena.connection.Connection, registry: SchemaRegistry, schema: str, s3_table_base_uri: str) -> AthenaTable:
+    return AthenaTable(conn, schema, "events", COLUMNS, s3_table_base_uri).create(registry)
+
+
+def test_unload_parquet(
+    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
+) -> None:
+    src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
+
+    class ParquetUnload(Unload):
+        sql = "select * from {{ source_table }}"
+        destination = unload_s3_uri
+        format = "parquet"
+
+    executor.run(ParquetUnload(), template_context={"source_table": src_table.qualified_name})
+
+    Files(f"{unload_s3_uri}*").approve_parquet(sort_columns=["user_id"])
+
+
+def test_unload_json(
+    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
+) -> None:
+    src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
+
+    class JsonUnload(Unload):
+        sql = "select * from {{ source_table }}"
+        destination = unload_s3_uri
+        format = "json"
+
+    executor.run(JsonUnload(), template_context={"source_table": src_table.qualified_name})
+
+    Files(f"{unload_s3_uri}*").approve_jsonl(sort_columns=["user_id"])
+
+
+def test_unload_csv(
+    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
+) -> None:
+    src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
+
+    class CsvUnload(Unload):
+        sql = "select * from {{ source_table }}"
+        destination = unload_s3_uri
+        format = "csv"
+
+    executor.run(CsvUnload(), template_context={"source_table": src_table.qualified_name})
+
+    Files(f"{unload_s3_uri}*").approve_csv(sort_columns=["user_id"])
+
+
+def test_unload_with_options(
+    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
+) -> None:
+    src_table.insert([(1, "2024-01-01", 5)])
+
+    class OptionsUnload(Unload):
+        sql = "select * from {{ source_table }}"
+        destination = unload_s3_uri
+        format = "parquet"
+        options = ["compression = 'SNAPPY'"]
+
+    executor.run(OptionsUnload(), template_context={"source_table": src_table.qualified_name})

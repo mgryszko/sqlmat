@@ -180,10 +180,7 @@ class PostgresAdapter(Adapter):
         self._emit(TableCreated(schema=schema, table=table, sql=create_sql))
         self._execute(create_sql)
 
-        parts = ["format csv"]
-        if options:
-            parts.extend(options)
-        with_clause = ", ".join(parts)
+        with_clause = ", ".join(["format csv"] + (options or []))
         copy_sql = f"copy {full_table_name} from stdin with ({with_clause})"
         with self._conn.cursor() as cur:
             self._copy_from_stdin(cur, copy_sql, source)
@@ -193,10 +190,7 @@ class PostgresAdapter(Adapter):
         if fmt != "csv":
             raise ValueError(f"PostgreSQL adapter only supports CSV format for unload, got: {fmt}")
 
-        parts = ["format csv"]
-        if options:
-            parts.extend(options)
-        with_clause = ", ".join(parts)
+        with_clause = ", ".join(["format csv"] + (options or []))
         copy_sql = f"copy ({sql}) to stdout with ({with_clause})"
         with self._conn.cursor() as cur:
             self._copy_to_stdout(cur, copy_sql, destination)

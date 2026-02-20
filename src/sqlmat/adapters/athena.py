@@ -1,5 +1,7 @@
 from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
+    DataLoaded,
+    DataUnloaded,
     EventHandler,
     RowsDeleted,
     RowsInserted,
@@ -166,10 +168,52 @@ class AthenaAdapter(Adapter):
         columns: list[tuple[str, str]] | None = None,
         options: list[str] | None = None,
     ) -> None:
-        raise NotImplementedError
+        if columns is None:
+            raise ValueError("Athena adapter requires columns for copy_from")
+
+        ext_table = f"{table}_src_tmp"
+        ext_full = f"{schema}.{ext_table}"
+        cols_sql = ", ".join(f"{name} {typ}" for name, typ in columns)
+
+        row_format = {
+            "parquet": "",
+            "orc": "",
+            "json": "row format serde 'org.openx.data.jsonserde.JsonSerDe'\n",
+            "csv": "row format delimited fields terminated by ','\n",
+        }[fmt]
+        stored_as = {"parquet": "PARQUET", "orc": "ORC", "json": "TEXTFILE", "csv": "TEXTFILE"}[fmt]
+        tbl_props = f"\ntblproperties ({', '.join(options)})" if options else ""
+
+        create_ext_sql = (
+            f"create external table {ext_full} ({cols_sql})\n"
+            f"{row_format}"
+            f"stored as {stored_as}\n"
+            f"location '{source}'"
+            f"{tbl_props}"
+        )
+        self._execute(create_ext_sql)
+        self._emit(TableCreated(schema=schema, table=ext_table, sql=create_ext_sql))
+
+        location = f"{self._s3_table_base_uri}/{table}/"
+        ctas_sql = (
+            f"create table {schema}.{table}"
+            f" with (table_type = 'ICEBERG', is_external = false, location = '{location}', format = 'PARQUET')"
+            f" as select * from {ext_full}"
+        )
+        self._execute(ctas_sql)
+        self._emit(TableCreated(schema=schema, table=table, sql=ctas_sql))
+        self._emit(DataLoaded(sql=ctas_sql))
+
+        drop_sql = f"drop table if exists {ext_full}"
+        self._execute(drop_sql)
+        self._emit(TableDropped(schema=schema, table=ext_table, sql=drop_sql))
 
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
-        raise NotImplementedError
+        athena_fmt = {"parquet": "PARQUET", "json": "JSON", "csv": "TEXTFILE"}[fmt]
+        with_clause = ", ".join([f"format = '{athena_fmt}'"] + (options or []))
+        unload_sql = f"unload ({sql}) to '{destination}' with ({with_clause})"
+        self._execute(unload_sql)
+        self._emit(DataUnloaded(sql=unload_sql))
 
     def _execute(self, sql: str, params: list | None = None) -> None:
         cursor = self._conn.cursor()

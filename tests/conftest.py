@@ -47,4 +47,6 @@ def athena_env() -> AthenaEnv:
         work_group=_require_env("ATHENA_WORK_GROUP"),
         s3_table_base_uri=_require_env("ATHENA_S3_TABLE_BASE_URI"),
         schema_prefix=_require_env("ATHENA_SCHEMA_PREFIX"),
+        copy_s3_uri=_require_env("COPY_S3_URI"),
+        unload_s3_uri=_require_env("UNLOAD_S3_URI"),
     )

@@ -22,3 +22,5 @@ class AthenaEnv:
     work_group: str
     s3_table_base_uri: str
     schema_prefix: str
+    copy_s3_uri: str
+    unload_s3_uri: str

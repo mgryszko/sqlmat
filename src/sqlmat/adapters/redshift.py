@@ -162,10 +162,7 @@ class RedshiftAdapter(Adapter):
 
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
         escaped_sql = sql.replace("'", "\\'")
-        parts = [f"unload ('{escaped_sql}')", f"to '{destination}'", f"format as {fmt.upper()}"]
-        if options:
-            parts.extend(options)
-        unload_sql = " ".join(parts)
+        unload_sql = " ".join([f"unload ('{escaped_sql}')", f"to '{destination}'", f"format as {fmt.upper()}"] + (options or []))
 
         self._execute(unload_sql)
         self._emit(DataUnloaded(sql=unload_sql))
@@ -189,10 +186,7 @@ class RedshiftAdapter(Adapter):
         self._execute(create_sql)
 
         format_clause = {"parquet": "format as parquet", "csv": "csv", "json": "json 'auto'"}[fmt]
-        parts = [f"copy {full_table_name}", f"from '{source}'", format_clause]
-        if options:
-            parts.extend(options)
-        copy_sql = " ".join(parts)
+        copy_sql = " ".join([f"copy {full_table_name}", f"from '{source}'", format_clause] + (options or []))
         self._execute(copy_sql)
         self._emit(DataLoaded(sql=copy_sql))
 

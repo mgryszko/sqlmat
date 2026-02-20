@@ -159,20 +159,14 @@ class DuckDBAdapter(Adapter):
         options: list[str] | None = None,
     ) -> None:
         read_fn = {"parquet": "read_parquet", "csv": "read_csv", "json": "read_json"}[fmt]
-        args = [f"'{source}'"]
-        if options:
-            args.extend(options)
-        args_str = ", ".join(args)
+        args_str = ", ".join([f"'{source}'"] + (options or []))
         full_table_name = f"{schema}.{table}"
         sql = f"create table {full_table_name} as select * from {read_fn}({args_str})"
         self._conn.execute(sql)
         self._emit(DataLoaded(sql=sql))
 
     def copy_to(self, sql: str, destination: str, fmt: str, options: list[str] | None = None) -> None:
-        option_parts = [f"format {fmt.upper()}"]
-        if options:
-            option_parts.extend(options)
-        options_str = ", ".join(option_parts)
+        options_str = ", ".join([f"format {fmt.upper()}"] + (options or []))
         copy_sql = f"copy ({sql}) to '{destination}' ({options_str})"
 
         self._conn.execute(copy_sql)
