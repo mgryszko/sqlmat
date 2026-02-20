@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(git checkout:*)",
+      "Bash(git clone:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(uv add:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "WebFetch(domain:docs.pola.rs)",
+      "WebFetch(domain:duckdb.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pyathena.dev)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:www.psycopg.org)",
+      "WebSearch",
+      "mcp__aws-knowledge__aws___read_documentation",
+      "mcp__aws-knowledge__aws___search_documentation",
+      "mcp__context7__query-docs",
+      "mcp__context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ]
+  }
+}
