@@ -24,7 +24,7 @@ def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class ParquetUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
 
@@ -37,7 +37,7 @@ def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: At
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class JsonUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "json"
 
@@ -50,7 +50,7 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Ath
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class CsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "csv"
         options = ["field_delimiter = ','"]
@@ -64,7 +64,7 @@ def test_unload_with_options(executor: Executor, registry: SchemaRegistry, src_t
     src_table.insert([(1, "2024-01-01", 5)])
 
     class OptionsUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
         options = ["compression = 'SNAPPY'"]

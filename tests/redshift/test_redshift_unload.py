@@ -28,7 +28,7 @@ def test_unload_parquet(
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class ParquetUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
         options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
@@ -42,7 +42,7 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Tab
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class CsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "csv"
         options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'", "HEADER"]
@@ -56,7 +56,7 @@ def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: Ta
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class JsonUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "json"
         options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
@@ -72,7 +72,7 @@ def test_unload_with_options(
     src_table.insert([(1, "2024-01-01", 5)])
 
     class OptionsUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
         options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'", "ALLOWOVERWRITE"]

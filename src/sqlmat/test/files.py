@@ -32,7 +32,7 @@ class Files:
         received = [json.loads(line) for line in (self._read_lines())]
         if sort_columns:
             received.sort(key=lambda row: tuple(row[col] for col in sort_columns))
-        normalized_received = json.dumps(received, indent=2, sort_keys=True)
+        normalized_received = json.dumps(received, indent=2)
 
         verify(normalized_received, options=Options().for_file.with_extension("json"))
 

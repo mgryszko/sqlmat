@@ -38,7 +38,7 @@ def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: 
     output_path = str(tmp_path / "output.csv")
 
     class CsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
         options = ["header"]

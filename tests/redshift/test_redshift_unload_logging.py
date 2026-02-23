@@ -41,7 +41,7 @@ def test_unload_events(
     src_table.insert([(1, "2024-01-01", 5)])
 
     class ParquetUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = unload_s3_uri
         format = "parquet"
         options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]

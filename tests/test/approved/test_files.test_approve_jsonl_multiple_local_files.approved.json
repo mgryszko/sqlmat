@@ -1,22 +1,22 @@
 [
   {
-    "event_count": 5,
+    "user_id": 1,
     "event_date": "2024-01-01",
-    "user_id": 1
+    "event_count": 5
   },
   {
-    "event_count": 7,
+    "user_id": 1,
     "event_date": "2024-01-02",
-    "user_id": 1
+    "event_count": 7
   },
   {
-    "event_count": 9,
+    "user_id": 2,
     "event_date": "2024-01-01",
-    "user_id": 2
+    "event_count": 9
   },
   {
-    "event_count": 3,
+    "user_id": 2,
     "event_date": "2024-01-02",
-    "user_id": 2
+    "event_count": 3
   }
 ]

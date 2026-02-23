@@ -25,7 +25,7 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Tab
     output_path = str(tmp_path / "output.csv")
 
     class CsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
         options = ["header"]
@@ -41,7 +41,7 @@ def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegi
     output_path = str(tmp_path / "output.csv")
 
     class PipeCsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
         options = ["header", "delimiter '|'"]
@@ -71,7 +71,7 @@ def test_unload_rejects_non_csv_format(executor: Executor, registry: SchemaRegis
     output_path = str(tmp_path / "output.parquet")
 
     class ParquetUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "parquet"
 

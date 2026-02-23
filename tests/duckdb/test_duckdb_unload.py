@@ -24,7 +24,7 @@ def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table:
     output_path = str(tmp_path / "output.parquet")
 
     class ParquetUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "parquet"
 
@@ -39,7 +39,7 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Tab
     output_path = str(tmp_path / "output.csv")
 
     class CsvUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
 
@@ -54,7 +54,7 @@ def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: Ta
     output_path = str(tmp_path / "output.json")
 
     class JsonUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "json"
 
@@ -69,7 +69,7 @@ def test_unload_json_with_gzip(executor: Executor, registry: SchemaRegistry, src
     output_path = str(tmp_path / "output.json.gz")
 
     class JsonGzipUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "json"
         options = ["COMPRESSION gzip"]
@@ -85,7 +85,7 @@ def test_unload_csv_with_gzip(executor: Executor, registry: SchemaRegistry, src_
     output_path = str(tmp_path / "output.csv.gz")
 
     class CsvGzipUnload(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
         options = ["COMPRESSION gzip"]
@@ -101,7 +101,7 @@ def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegi
     output_path = str(tmp_path / "output.csv")
 
     class CsvUnloadWithOptions(Unload):
-        sql = "select * from {{ source_table }}"
+        sql = "select user_id, event_date, event_count from {{ source_table }}"
         destination = output_path
         format = "csv"
         options = ["HEADER TRUE", "DELIMITER '|'"]
