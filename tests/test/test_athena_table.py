@@ -5,6 +5,7 @@ import pyathena
 import pytest
 from env import AthenaEnv
 
+from sqlmat import normalize_path
 from sqlmat.test import AthenaTable, SchemaRegistry
 
 
@@ -21,7 +22,7 @@ def conn(athena_env: AthenaEnv) -> Generator[pyathena.Connection]:
 
 @pytest.fixture
 def s3_table_base_uri(athena_env: AthenaEnv) -> str:
-    return f"{athena_env.s3_table_base_uri}/sqlmat_{uuid.uuid4().hex[:8]}"
+    return normalize_path(f"{athena_env.s3_table_base_uri}/sqlmat_{uuid.uuid4().hex[:8]}")
 
 
 @pytest.fixture

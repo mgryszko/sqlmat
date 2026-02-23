@@ -6,6 +6,10 @@ from pathlib import Path
 from approvaltests import Options, verify
 from fsspec import open_files
 
+from sqlmat.paths import normalize_path
+
+__all__ = ["Files", "normalize_path"]
+
 
 class Files:
     def __init__(self, path: Path | str):

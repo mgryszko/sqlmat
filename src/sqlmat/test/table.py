@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from sqlmat.paths import normalize_path
 from sqlmat.test.schema_registry import SchemaRegistry
 
 type ColumnSpec = list[tuple[str, str]]
@@ -143,7 +144,7 @@ class AthenaTable(Table):
             conn=self._conn,
             table_qualified_name=self.qualified_name,
             columns=self._columns,
-            location=f"{self._s3_table_base_uri}/{self._name}/",
+            location=normalize_path(f"{self._s3_table_base_uri}/{self._name}/"),
             registry=registry,
         )
         return self

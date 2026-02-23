@@ -15,6 +15,7 @@ from sqlmat.core.events import (
     TransactionRolledBack,
     noop_handler,
 )
+from sqlmat.paths import normalize_path
 
 
 class AthenaAdapter(Adapter):
@@ -52,7 +53,7 @@ class AthenaAdapter(Adapter):
         return [row[0] for row in result]
 
     def create_table_as(self, schema: str, table: str, sql: str) -> None:
-        location = f"{self._s3_table_base_uri}/{table}/"
+        location = normalize_path(f"{self._s3_table_base_uri}/{table}/")
         create_sql = (
             f"create table {schema}.{table}"
             f" with (table_type = 'ICEBERG', is_external = false, location = '{location}', format = 'PARQUET')"
@@ -188,7 +189,7 @@ class AthenaAdapter(Adapter):
         self._execute(create_ext_sql)
         self._emit(TableCreated(schema=schema, table=ext_table, sql=create_ext_sql))
 
-        location = f"{self._s3_table_base_uri}/{table}/"
+        location = normalize_path(f"{self._s3_table_base_uri}/{table}/")
         ctas_sql = (
             f"create table {schema}.{table}"
             f" with (table_type = 'ICEBERG', is_external = false, location = '{location}', format = 'PARQUET')"

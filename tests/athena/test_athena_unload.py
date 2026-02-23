@@ -3,13 +3,14 @@ import pytest
 from env import AthenaEnv
 
 from sqlmat import Executor, Unload
+from sqlmat import normalize_path
 from sqlmat.test import AthenaTable, Files, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
 
 @pytest.fixture
 def unload_s3_uri(athena_env: AthenaEnv, test_function_id: str) -> str:
-    return f"{athena_env.unload_s3_uri}/athena-unload-{test_function_id}/"
+    return normalize_path(f"{athena_env.unload_s3_uri}/athena-unload-{test_function_id}/")
 
 
 COLUMNS: ColumnSpec = [("user_id", "int"), ("event_date", "string"), ("event_count", "int")]

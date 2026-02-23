@@ -7,6 +7,7 @@ from env import AthenaEnv
 from sqlmat.adapters import AthenaAdapter
 from sqlmat.core.events import Event
 from sqlmat.core.executor import Executor
+from sqlmat import normalize_path
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
@@ -24,7 +25,7 @@ def conn(athena_env: AthenaEnv) -> Generator[pyathena.Connection]:
 
 @pytest.fixture
 def s3_table_base_uri(athena_env: AthenaEnv, test_function_id: str) -> str:
-    return f"{athena_env.s3_table_base_uri}/sqlmat_{test_function_id}"
+    return normalize_path(f"{athena_env.s3_table_base_uri}/sqlmat_{test_function_id}")
 
 
 @pytest.fixture

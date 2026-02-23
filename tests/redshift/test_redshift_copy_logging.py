@@ -17,6 +17,7 @@ from test.test_files import write_parquet_s3
 from sqlmat import Copy, Executor
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
+from sqlmat import normalize_path
 from sqlmat.test import SchemaRegistry
 
 COLUMNS = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]
@@ -39,7 +40,7 @@ def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
 
 @pytest.fixture
 def copy_s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
-    return f"{redshift_env.copy_s3_uri}/redshift_copy_{test_function_id}/"
+    return normalize_path(f"{redshift_env.copy_s3_uri}/redshift_copy_{test_function_id}/")
 
 
 def test_copy_events(

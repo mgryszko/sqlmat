@@ -7,12 +7,13 @@ import pytest
 from env import RedshiftEnv
 from fsspec import open as fsspec_open
 
+from sqlmat import normalize_path
 from sqlmat.test import Files
 
 
 @pytest.fixture
 def s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
-    return f"{redshift_env.unload_s3_uri}/files-approvals-{test_function_id}/"
+    return normalize_path(f"{redshift_env.unload_s3_uri}/files-approvals-{test_function_id}/")
 
 
 FIELDNAMES = ["user_id", "event_date", "event_count"]

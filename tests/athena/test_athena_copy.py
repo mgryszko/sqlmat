@@ -4,13 +4,14 @@ from env import AthenaEnv
 from test.test_files import write_csv_s3, write_jsonl_s3, write_parquet_s3
 
 from sqlmat import Copy, Executor
+from sqlmat import normalize_path
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
 
 @pytest.fixture
 def copy_s3_uri(athena_env: AthenaEnv, test_function_id: str) -> str:
-    return f"{athena_env.copy_s3_uri}/athena-copy-{test_function_id}/"
+    return normalize_path(f"{athena_env.copy_s3_uri}/athena-copy-{test_function_id}/")
 
 
 COLUMNS: ColumnSpec = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]

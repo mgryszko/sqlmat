@@ -12,6 +12,7 @@ from event_matchers import (
 from sqlmat import Executor, Unload
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
+from sqlmat import normalize_path
 from sqlmat.test import SchemaRegistry, Table
 
 
@@ -32,7 +33,7 @@ def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
 
 @pytest.fixture
 def unload_s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
-    return f"{redshift_env.unload_s3_uri}/redshift_unload_{test_function_id}/"
+    return normalize_path(f"{redshift_env.unload_s3_uri}/redshift_unload_{test_function_id}/")
 
 
 def test_unload_events(

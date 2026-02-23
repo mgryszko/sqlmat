@@ -6,6 +6,7 @@ from sqlmat.core.transformation import (
     IncrementalTableTransformation,
     Unload,
 )
+from sqlmat.paths import normalize_path
 from sqlmat.sinks import PythonLoggingSink
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "IncrementalTableTransformation",
     "PythonLoggingSink",
     "Unload",
+    "normalize_path",
 ]
