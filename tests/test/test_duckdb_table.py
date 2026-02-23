@@ -14,9 +14,8 @@ def conn() -> Generator[duckdb.DuckDBPyConnection]:
 
 @pytest.fixture
 def registry(conn: duckdb.DuckDBPyConnection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 def test_insert_tuples(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
@@ -95,26 +94,22 @@ def test_delete_with_where(conn: duckdb.DuckDBPyConnection, registry: SchemaRegi
 
 
 def test_create_schema_with_prefix(conn: duckdb.DuckDBPyConnection) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema(prefix="staging")
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema(prefix="staging")
 
-    assert schema.startswith("staging_")
-    table = DuckDBTable(conn, schema, "events", [("id", "integer")]).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        assert schema.startswith("staging_")
+        table = DuckDBTable(conn, schema, "events", [("id", "integer")]).create(registry)
+        table.assert_table_equals([])
 
     assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 
 
 def test_create_schema_without_prefix(conn: duckdb.DuckDBPyConnection) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema()
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema()
 
-    table = DuckDBTable(conn, schema, "events", [("id", "integer")]).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        table = DuckDBTable(conn, schema, "events", [("id", "integer")]).create(registry)
+        table.assert_table_equals([])
 
     assert conn.cursor().execute(f"select schema_name from information_schema.schemata where schema_name = '{schema}'").fetchall() == []
 

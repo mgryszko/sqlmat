@@ -14,9 +14,8 @@ def conn() -> Generator[duckdb.DuckDBPyConnection]:
 
 @pytest.fixture
 def registry(conn: duckdb.DuckDBPyConnection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture

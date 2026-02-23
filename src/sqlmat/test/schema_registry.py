@@ -7,6 +7,12 @@ class SchemaRegistry:
         self._created_tables: list[str] = []
         self._created_schemas: list[str] = []
 
+    def __enter__(self) -> "SchemaRegistry":
+        return self
+
+    def __exit__(self, *_) -> None:
+        self.teardown()
+
     def create_schema(self, prefix: str | None = None) -> str:
         suffix = uuid4().hex[:8]
         name = f"{prefix}_{suffix}" if prefix else f"s{suffix}"

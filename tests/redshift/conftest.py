@@ -23,9 +23,8 @@ def conn(redshift_env: RedshiftEnv) -> Generator[redshift_connector.Connection]:
 
 @pytest.fixture
 def registry(conn: redshift_connector.Connection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture

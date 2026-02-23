@@ -23,9 +23,8 @@ def conn(redshift_env: RedshiftEnv) -> Generator[redshift_connector.Connection]:
 
 @pytest.fixture
 def registry(conn: redshift_connector.Connection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture
@@ -109,14 +108,12 @@ def test_delete_with_where(conn: redshift_connector.Connection, registry: Schema
 
 
 def test_create_schema_with_prefix(conn: redshift_connector.Connection, redshift_env: RedshiftEnv) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema(prefix=redshift_env.schema_prefix)
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema(prefix=redshift_env.schema_prefix)
 
-    assert schema.startswith(f"{redshift_env.schema_prefix}_")
-    table = RedshiftTable(conn, schema, "events", [("id", "integer")]).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        assert schema.startswith(f"{redshift_env.schema_prefix}_")
+        table = RedshiftTable(conn, schema, "events", [("id", "integer")]).create(registry)
+        table.assert_table_equals([])
 
     cursor = conn.cursor()
     cursor.execute("select schema_name from information_schema.schemata where schema_name = %s", (schema,))
@@ -124,13 +121,11 @@ def test_create_schema_with_prefix(conn: redshift_connector.Connection, redshift
 
 
 def test_create_schema_without_prefix(conn: redshift_connector.Connection) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema()
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema()
 
-    table = RedshiftTable(conn, schema, "events", [("id", "integer")]).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        table = RedshiftTable(conn, schema, "events", [("id", "integer")]).create(registry)
+        table.assert_table_equals([])
 
     cursor = conn.cursor()
     cursor.execute("select schema_name from information_schema.schemata where schema_name = %s", (schema,))

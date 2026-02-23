@@ -45,9 +45,8 @@ def executor(adapter: AthenaAdapter, events: list[Event]) -> Executor:
 
 @pytest.fixture
 def registry(conn: pyathena.connection.Connection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture

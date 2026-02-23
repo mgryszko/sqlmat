@@ -27,9 +27,8 @@ def s3_table_base_uri(athena_env: AthenaEnv) -> str:
 
 @pytest.fixture
 def registry(conn: pyathena.Connection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture
@@ -115,14 +114,12 @@ def test_delete_with_where(conn: pyathena.Connection, registry: SchemaRegistry, 
 
 
 def test_create_schema_with_prefix(conn: pyathena.Connection, athena_env: AthenaEnv, s3_table_base_uri: str) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema(prefix=athena_env.schema_prefix)
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema(prefix=athena_env.schema_prefix)
 
-    assert schema.startswith(f"{athena_env.schema_prefix}_")
-    table = AthenaTable(conn, schema, "events", [("id", "int")], s3_table_base_uri).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        assert schema.startswith(f"{athena_env.schema_prefix}_")
+        table = AthenaTable(conn, schema, "events", [("id", "int")], s3_table_base_uri).create(registry)
+        table.assert_table_equals([])
 
     cursor = conn.cursor()
     cursor.execute("show databases")
@@ -131,13 +128,11 @@ def test_create_schema_with_prefix(conn: pyathena.Connection, athena_env: Athena
 
 
 def test_create_schema_without_prefix(conn: pyathena.Connection, s3_table_base_uri: str) -> None:
-    registry = SchemaRegistry(conn)
-    schema = registry.create_schema()
+    with SchemaRegistry(conn) as registry:
+        schema = registry.create_schema()
 
-    table = AthenaTable(conn, schema, "events", [("id", "int")], s3_table_base_uri).create(registry)
-    table.assert_table_equals([])
-
-    registry.teardown()
+        table = AthenaTable(conn, schema, "events", [("id", "int")], s3_table_base_uri).create(registry)
+        table.assert_table_equals([])
 
     cursor = conn.cursor()
     cursor.execute("show databases")

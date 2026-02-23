@@ -29,9 +29,8 @@ def conn(postgres_container: PostgresContainer) -> Generator[psycopg.Connection]
 
 @pytest.fixture
 def registry(conn: psycopg.Connection) -> Generator[SchemaRegistry]:
-    r = SchemaRegistry(conn)
-    yield r
-    r.teardown()
+    with SchemaRegistry(conn) as r:
+        yield r
 
 
 @pytest.fixture
