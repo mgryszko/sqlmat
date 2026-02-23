@@ -2,11 +2,14 @@ import os
 import uuid
 
 import pytest
+from approvaltests.namer.namer_base import NamerBase
 from approvaltests.reporters import PythonNativeReporter, set_default_reporter
 from dotenv import load_dotenv
 from env import AthenaEnv, RedshiftEnv
 
 set_default_reporter(PythonNativeReporter())
+
+NamerBase.get_config = lambda self: {"subdirectory": "approved"}
 
 load_dotenv()
 

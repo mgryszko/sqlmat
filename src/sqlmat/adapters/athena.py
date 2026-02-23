@@ -184,13 +184,7 @@ class AthenaAdapter(Adapter):
         stored_as = {"parquet": "PARQUET", "orc": "ORC", "json": "TEXTFILE", "csv": "TEXTFILE"}[fmt]
         tbl_props = f"\ntblproperties ({', '.join(options)})" if options else ""
 
-        create_ext_sql = (
-            f"create external table {ext_full} ({cols_sql})\n"
-            f"{row_format}"
-            f"stored as {stored_as}\n"
-            f"location '{source}'"
-            f"{tbl_props}"
-        )
+        create_ext_sql = f"create external table {ext_full} ({cols_sql})\n{row_format}stored as {stored_as}\nlocation '{source}'{tbl_props}"
         self._execute(create_ext_sql)
         self._emit(TableCreated(schema=schema, table=ext_table, sql=create_ext_sql))
 

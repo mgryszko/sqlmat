@@ -108,7 +108,7 @@ def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegi
 
     executor.run(CsvUnloadWithOptions(), template_context={"source_table": src_table.qualified_name})
 
-    Files(output_path).approve_csv()
+    Files(output_path).approve_csv(header=True, delimiter="|")
 
 
 def test_unload_error_on_invalid_sql(executor: Executor, tmp_path: pathlib.Path) -> None:

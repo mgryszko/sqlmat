@@ -36,37 +36,47 @@ class Files:
 
         verify(normalized_received, options=Options().for_file.with_extension("json"))
 
-    def approve_csv(self, header: bool = False, sort_columns: list[str] | None = None) -> None:
+    def approve_csv(
+        self,
+        header: bool = False,
+        sort_columns: list[str] | None = None,
+        fieldnames: list[str] | None = None,
+        delimiter: str = ",",
+    ) -> None:
         if header:
-            received = self._read_csv_with_header(sort_columns)
+            received = self._read_csv_with_header(sort_columns, delimiter)
         else:
-            received = self._read()
-
+            received = self._read_csv_by_fieldnames(fieldnames, sort_columns, delimiter)
         verify(received, options=Options().for_file.with_extension("csv"))
 
-    def _read_csv_with_header(self, sort_columns: list[str] | None = None) -> str:
+    def _read_csv_with_header(self, sort_columns: list[str] | None, delimiter: str = ",") -> str:
         rows = []
         fieldnames = None
         for of in open_files(str(self.path), "r", compression="infer"):
             with of as f:
-                reader = csv.DictReader(f)
+                reader = csv.DictReader(f, delimiter=delimiter)
                 if fieldnames is None:
                     fieldnames = reader.fieldnames
                 rows.extend(reader)
         if sort_columns:
             rows.sort(key=lambda row: tuple(row[col] for col in sort_columns))
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n", delimiter=delimiter)
         writer.writeheader()
         writer.writerows(rows)
         return output.getvalue()
 
-    def _read(self) -> str:
-        contents = []
+    def _read_csv_by_fieldnames(self, fieldnames: list[str] | None, sort_columns: list[str] | None, delimiter: str) -> str:
+        rows = []
         for of in open_files(str(self.path), "r", compression="infer"):
             with of as f:
-                contents.append(f.read())
-        return "".join(contents)
+                rows.extend(csv.DictReader(f, fieldnames=fieldnames, delimiter=delimiter))
+        if sort_columns:
+            rows.sort(key=lambda row: tuple(row[col] for col in sort_columns))
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fieldnames or list(rows[0].keys()), lineterminator="\n", delimiter=delimiter)
+        writer.writerows(rows)
+        return output.getvalue()
 
     def _read_lines(self) -> list[str]:
         lines = []

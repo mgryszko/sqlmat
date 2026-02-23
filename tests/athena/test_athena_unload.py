@@ -20,9 +20,7 @@ def src_table(conn: pyathena.connection.Connection, registry: SchemaRegistry, sc
     return AthenaTable(conn, schema, "events", COLUMNS, s3_table_base_uri).create(registry)
 
 
-def test_unload_parquet(
-    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
-) -> None:
+def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class ParquetUnload(Unload):
@@ -35,9 +33,7 @@ def test_unload_parquet(
     Files(f"{unload_s3_uri}*").approve_parquet(sort_columns=["user_id"])
 
 
-def test_unload_json(
-    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
-) -> None:
+def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class JsonUnload(Unload):
@@ -50,24 +46,21 @@ def test_unload_json(
     Files(f"{unload_s3_uri}*").approve_jsonl(sort_columns=["user_id"])
 
 
-def test_unload_csv(
-    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
-) -> None:
+def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     class CsvUnload(Unload):
         sql = "select * from {{ source_table }}"
         destination = unload_s3_uri
         format = "csv"
+        options = ["field_delimiter = ','"]
 
     executor.run(CsvUnload(), template_context={"source_table": src_table.qualified_name})
 
-    Files(f"{unload_s3_uri}*").approve_csv(sort_columns=["user_id"])
+    Files(f"{unload_s3_uri}*").approve_csv(fieldnames=["user_id", "event_date", "event_count"], sort_columns=["user_id"])
 
 
-def test_unload_with_options(
-    executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str
-) -> None:
+def test_unload_with_options(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
     class OptionsUnload(Unload):
