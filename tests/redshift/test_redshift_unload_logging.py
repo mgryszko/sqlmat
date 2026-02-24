@@ -9,10 +9,9 @@ from event_matchers import (
     unload_started,
 )
 
-from sqlmat import Executor, Unload
+from sqlmat import Executor, Unload, normalize_path
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
-from sqlmat import normalize_path
 from sqlmat.test import SchemaRegistry, Table
 
 

@@ -3,7 +3,7 @@ from collections.abc import Generator
 import duckdb
 import pytest
 
-from sqlmat.test import DuckDBTable, SchemaRegistry
+from sqlmat.test import DuckDBTable, DuckDBTx, SchemaRegistry
 
 
 @pytest.fixture
@@ -155,3 +155,30 @@ def test_assert_table_contains_fails_when_row_missing(conn: duckdb.DuckDBPyConne
 
     with pytest.raises(AssertionError, match="Expected row not found"):
         table.assert_table_contains([{"id": 3, "name": "Charlie"}])
+
+
+def test_duckdb_tx_commits_on_success(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
+    table = DuckDBTable(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
+
+    with DuckDBTx(conn):
+        table.insert([(1, "Alice"), (2, "Bob")])
+
+    table.assert_table_equals(
+        [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+        order_by=["id"],
+    )
+
+
+def test_duckdb_tx_rolls_back_on_error(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
+    table = DuckDBTable(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
+    table.insert([(1, "Alice")])
+
+    def insert_and_fail() -> None:
+        with DuckDBTx(conn):
+            table.insert([(2, "Bob")])
+            raise RuntimeError("simulated failure")
+
+    with pytest.raises(RuntimeError):
+        insert_and_fail()
+
+    table.assert_table_equals([{"id": 1, "name": "Alice"}])

@@ -4,7 +4,7 @@ import pytest
 import redshift_connector
 from env import RedshiftEnv
 
-from sqlmat.test import RedshiftTable, SchemaRegistry
+from sqlmat.test import RedshiftTable, RedshiftTx, SchemaRegistry
 
 
 @pytest.fixture(scope="module")
@@ -173,3 +173,30 @@ def test_assert_table_contains_fails_when_row_missing(conn: redshift_connector.C
 
     with pytest.raises(AssertionError, match="Expected row not found"):
         table.assert_table_contains([{"id": 3, "name": "Charlie"}])
+
+
+def test_redshift_tx_commits_on_success(conn: redshift_connector.Connection, registry: SchemaRegistry, schema: str) -> None:
+    table = RedshiftTable(conn, schema, "users", [("id", "integer"), ("name", "varchar")]).create(registry)
+
+    with RedshiftTx(conn):
+        table.insert([(1, "Alice"), (2, "Bob")])
+
+    table.assert_table_equals(
+        [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+        order_by=["id"],
+    )
+
+
+def test_redshift_tx_rolls_back_on_error(conn: redshift_connector.Connection, registry: SchemaRegistry, schema: str) -> None:
+    table = RedshiftTable(conn, schema, "users", [("id", "integer"), ("name", "varchar")]).create(registry)
+    table.insert([(1, "Alice")])
+
+    def insert_and_fail() -> None:
+        with RedshiftTx(conn):
+            table.insert([(2, "Bob")])
+            raise RuntimeError("simulated failure")
+
+    with pytest.raises(RuntimeError):
+        insert_and_fail()
+
+    table.assert_table_equals([{"id": 1, "name": "Alice"}])

@@ -2,8 +2,7 @@ import pyathena
 import pytest
 from env import AthenaEnv
 
-from sqlmat import Executor, Unload
-from sqlmat import normalize_path
+from sqlmat import Executor, Unload, normalize_path
 from sqlmat.test import AthenaTable, Files, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 

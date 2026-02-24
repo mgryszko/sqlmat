@@ -4,10 +4,10 @@ import pyathena
 import pytest
 from env import AthenaEnv
 
+from sqlmat import normalize_path
 from sqlmat.adapters import AthenaAdapter
 from sqlmat.core.events import Event
 from sqlmat.core.executor import Executor
-from sqlmat import normalize_path
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 

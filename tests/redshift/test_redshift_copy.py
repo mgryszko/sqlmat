@@ -3,9 +3,8 @@ import redshift_connector
 from env import RedshiftEnv
 from test.test_files import write_csv_s3, write_jsonl_s3, write_parquet_s3
 
-from sqlmat import Copy, Executor
+from sqlmat import Copy, Executor, normalize_path
 from sqlmat.adapters import RedshiftAdapter
-from sqlmat import normalize_path
 from sqlmat.test import RedshiftTable, SchemaRegistry
 
 

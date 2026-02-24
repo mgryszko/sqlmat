@@ -3,8 +3,7 @@ import pytest
 from env import AthenaEnv
 from test.test_files import write_csv_s3, write_jsonl_s3, write_parquet_s3
 
-from sqlmat import Copy, Executor
-from sqlmat import normalize_path
+from sqlmat import Copy, Executor, normalize_path
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 

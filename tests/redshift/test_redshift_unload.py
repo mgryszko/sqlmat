@@ -2,9 +2,8 @@ import pytest
 import redshift_connector
 from env import RedshiftEnv
 
-from sqlmat import Executor, Unload
+from sqlmat import Executor, Unload, normalize_path
 from sqlmat.adapters import RedshiftAdapter
-from sqlmat import normalize_path
 from sqlmat.test import Files, SchemaRegistry, Table
 
 
