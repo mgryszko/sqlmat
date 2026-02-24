@@ -12,6 +12,7 @@
       "Bash(uv run pytest:*)",
       "Bash(uv run:*)",
       "Bash(uv sync:*)",
+      "Bash(xargs cat:*)",
       "WebFetch(domain:docs.pola.rs)",
       "WebFetch(domain:duckdb.org)",
       "WebFetch(domain:github.com)",
