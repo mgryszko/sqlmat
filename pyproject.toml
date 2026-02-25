@@ -6,7 +6,6 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "duckdb",
     "jinja2",
 ]
 
@@ -15,12 +14,12 @@ test = [
     "approvaltests",
     "fsspec",
     "polars",
-    "s3fs",
 ]
 
 [dependency-groups]
 dev = [
     "approvaltests",
+    "duckdb",
     "fsspec",
     "polars",
     "psycopg",
