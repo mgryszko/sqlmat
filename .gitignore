@@ -1,5 +1,6 @@
 # IDEs and editors
 .idea/
+*.iml
 
 # Python-generated files
 __pycache__/
