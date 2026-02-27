@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import Any
 
 from sqlmat.paths import normalize_path
 from sqlmat.test.schema_registry import SchemaRegistry
 
 type ColumnSpec = list[tuple[str, str]]
 type Row = tuple | dict[str, object]
-type Execute = Callable[..., Any]
 
 
 class Table(ABC):
@@ -40,14 +37,14 @@ class Table(ABC):
         pass
 
     @abstractmethod
-    def _execute(self) -> Execute:
+    def _cursor(self):
         pass
 
     def delete(self, where: str | None = None) -> None:
         sql = f"delete from {self.qualified_name}"
         if where:
             sql += f" where {where}"
-        self._execute()(sql)
+        self._cursor().execute(sql)
 
     def assert_table_equals(
         self,
@@ -73,8 +70,9 @@ class Table(ABC):
 
     def _fetch_as_dicts(self, columns: list[str] | None = None) -> list[dict[str, object]]:
         cols = columns if columns else [name for name, _ in self._columns]
-        cursor = self._execute()(f"select {', '.join(cols)} from {self.qualified_name}")
-        return [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
+        cur = self._cursor()
+        cur.execute(f"select {', '.join(cols)} from {self.qualified_name}")
+        return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
     @staticmethod
     def _sort_key(order_by: list[str] | None = None):
@@ -85,12 +83,12 @@ class Table(ABC):
 
 class DuckDBTable(Table):
     def create(self, registry: SchemaRegistry) -> DuckDBTable:
-        _create_native_table(execute=self._execute(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
+        _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
         _insert_positional_params(
-            execute=self._execute(),
+            cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
             rows=rows,
             defaults=defaults,
@@ -98,18 +96,18 @@ class DuckDBTable(Table):
             placeholder="?",
         )
 
-    def _execute(self) -> Execute:
-        return self._conn.execute
+    def _cursor(self):
+        return self._conn
 
 
 class RedshiftTable(Table):
     def create(self, registry: SchemaRegistry) -> RedshiftTable:
-        _create_native_table(execute=self._execute(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
+        _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
         _insert_positional_params(
-            execute=self._execute(),
+            cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
             rows=rows,
             defaults=defaults,
@@ -117,18 +115,18 @@ class RedshiftTable(Table):
             placeholder="%s",
         )
 
-    def _execute(self) -> Execute:
-        return self._conn.cursor().execute
+    def _cursor(self):
+        return self._conn.cursor()
 
 
 class PostgresTable(Table):
     def create(self, registry: SchemaRegistry) -> PostgresTable:
-        _create_native_table(execute=self._execute(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
+        _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
         _insert_positional_params(
-            execute=self._execute(),
+            cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
             rows=rows,
             defaults=defaults,
@@ -136,8 +134,8 @@ class PostgresTable(Table):
             placeholder="%s",
         )
 
-    def _execute(self) -> Execute:
-        return self._conn.cursor().execute
+    def _cursor(self):
+        return self._conn.cursor()
 
 
 class AthenaTable(Table):
@@ -147,7 +145,7 @@ class AthenaTable(Table):
 
     def create(self, registry: SchemaRegistry) -> AthenaTable:
         _create_iceberg_table(
-            execute=self._execute(),
+            cursor=self._cursor(),
             table_qualified_name=self.qualified_name,
             columns=self._columns,
             location=normalize_path(f"{self._s3_table_base_uri}/{self._name}/"),
@@ -157,34 +155,34 @@ class AthenaTable(Table):
 
     def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
         _insert_named_params(
-            execute=self._execute(),
+            cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
             rows=rows,
             defaults=defaults,
             columns=self._columns,
         )
 
-    def _execute(self) -> Execute:
-        return self._conn.cursor().execute
+    def _cursor(self):
+        return self._conn.cursor()
 
 
-def _create_native_table(execute: Execute, table_qualified_name: str, columns: ColumnSpec, registry: SchemaRegistry) -> None:
+def _create_native_table(cursor, table_qualified_name: str, columns: ColumnSpec, registry: SchemaRegistry) -> None:
     cols = ", ".join(f"{name} {typ}" for name, typ in columns)
-    execute(f"create table {table_qualified_name} ({cols})")
+    cursor.execute(f"create table {table_qualified_name} ({cols})")
     registry.register(table_qualified_name)
 
 
 def _create_iceberg_table(
-    execute: Execute, table_qualified_name: str, columns: ColumnSpec, location: str, registry: SchemaRegistry
+    cursor, table_qualified_name: str, columns: ColumnSpec, location: str, registry: SchemaRegistry
 ) -> None:
     cols = ", ".join(f"{name} {typ}" for name, typ in columns)
     sql = f"create table {table_qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
-    execute(sql)
+    cursor.execute(sql)
     registry.register(table_qualified_name)
 
 
 def _insert_positional_params(
-    execute: Execute,
+    cursor,
     qualified_table_name: str,
     rows: list[tuple | dict[str, object]],
     defaults: dict[str, object] | None,
@@ -195,7 +193,7 @@ def _insert_positional_params(
         if isinstance(row, tuple):
             placeholders = ", ".join(placeholder for _ in row)
             sql = f"insert into {qualified_table_name} values ({placeholders})"
-            execute(sql, list(row))
+            cursor.execute(sql, list(row))
         else:
             merged = {**(defaults or {}), **row}
             column_names = [name for name, _ in columns]
@@ -203,11 +201,11 @@ def _insert_positional_params(
             placeholders = ", ".join(placeholder for _ in column_names)
             values = [merged[c] for c in column_names]
             sql = f"insert into {qualified_table_name} ({col_list}) values ({placeholders})"
-            execute(sql, values)
+            cursor.execute(sql, values)
 
 
 def _insert_named_params(
-    execute: Execute, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: ColumnSpec
+    cursor, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: ColumnSpec
 ) -> None:
     column_names = [name for name, _ in columns]
     placeholders = ", ".join(f"%({name})s" for name in column_names)
@@ -217,4 +215,4 @@ def _insert_named_params(
             values = dict(zip(column_names, row, strict=True))
         else:
             values = {**(defaults or {}), **row}
-        execute(sql, values)
+        cursor.execute(sql, values)
