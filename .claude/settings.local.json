@@ -24,7 +24,8 @@
       "mcp__aws-knowledge__aws___search_documentation",
       "mcp__context7__query-docs",
       "mcp__context7__resolve-library-id",
-      "mcp__plugin_context7_context7__query-docs"
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(mv:*)"
     ]
   }
 }

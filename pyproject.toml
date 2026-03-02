@@ -23,6 +23,7 @@ dev = [
     "fsspec",
     "polars",
     "psycopg",
+    "psycopg2-binary",
     "pytest",
     "pytest-xdist",
     "python-dotenv",
