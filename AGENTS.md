@@ -87,6 +87,11 @@ uv run ruff format
 
 - **Type all functions and methods**: Every function and method (including test functions, fixtures, and helpers) must have type annotations for all parameters and the return type
 - **SQL keywords, types, and function names**: Always use lowercase for SQL keywords (`select`, `from`, `create table`), data types (`integer`, `varchar`), and function names (`read_parquet`, `lower`). This applies to both production code and tests. Exception: user-provided options and format specifiers may use uppercase when required by the database (e.g., `fmt.upper()` for format values)
+- **SQL dialect awareness**: When writing SQL queries, always confirm the target database engine (Redshift, Athena, PostgreSQL, DuckDB) before writing. Use only functions and syntax available in that specific engine
+
+### Working practices
+
+- **Investigation before modification**: For investigation/exploration tasks, avoid making permanent code changes unless explicitly asked. Present findings as a summary or plan document first
 
 ### Key design decisions
 
