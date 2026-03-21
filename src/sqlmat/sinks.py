@@ -28,6 +28,12 @@ from sqlmat.core.events import (
 
 
 class PythonLoggingSink:
+    """Event handler that routes sqlmat events to Python's logging module.
+
+    High-level events (transformation/copy/unload started/completed/failed) are logged at INFO/ERROR.
+    Low-level SQL events are logged at DEBUG. Uses the "sqlmat" logger by default.
+    """
+
     def __init__(self, logger: logging.Logger | None = None):
         self._logger = logger or logging.getLogger("sqlmat")
 

@@ -7,6 +7,8 @@ SOURCE_TABLE_ALIAS = "source"
 
 
 class Adapter(ABC):
+    """Abstract base class for database adapters. Defines operations used by the Executor."""
+
     def __init__(self, event_handler: EventHandler = noop_handler):
         self._event_handler = event_handler
 

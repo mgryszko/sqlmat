@@ -18,6 +18,8 @@ from sqlmat.core.events import (
 
 
 class PostgresAdapter(Adapter):
+    """Adapter for PostgreSQL. Accepts a DB-API 2.0 connection (psycopg2 or psycopg 3)."""
+
     def __init__(self, conn, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
         self._conn = conn

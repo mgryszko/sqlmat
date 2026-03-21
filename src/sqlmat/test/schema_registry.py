@@ -2,6 +2,11 @@ from uuid import uuid4
 
 
 class SchemaRegistry:
+    """Manages creation and teardown of test schemas. Usable as a context manager.
+
+    Tracks created schemas and registered tables, dropping them in reverse order on teardown.
+    """
+
     def __init__(self, conn):
         self._conn = conn
         self._created_tables: list[str] = []

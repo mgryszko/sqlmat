@@ -19,6 +19,11 @@ from sqlmat.paths import normalize_path
 
 
 class AthenaAdapter(Adapter):
+    """Adapter for AWS Athena. Creates Iceberg tables backed by Parquet on S3.
+
+    Transactions are no-ops since Athena does not support them.
+    """
+
     def __init__(self, conn, s3_table_base_uri: str, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
         self._conn = conn

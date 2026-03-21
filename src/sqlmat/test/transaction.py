@@ -4,6 +4,8 @@ from types import TracebackType
 
 
 class DuckDBTx:
+    """Context manager that wraps a DuckDB connection in a transaction. Commits on success, rolls back on exception."""
+
     def __init__(self, conn) -> None:
         self._conn = conn
 
@@ -19,6 +21,8 @@ class DuckDBTx:
 
 
 class PostgresTx:
+    """Context manager that wraps a PostgreSQL connection in a transaction. Commits on success, rolls back on exception."""
+
     def __init__(self, conn) -> None:
         self._conn = conn
 
@@ -34,6 +38,8 @@ class PostgresTx:
 
 
 class RedshiftTx:
+    """Context manager that wraps a Redshift connection in a transaction. Commits on success, rolls back on exception."""
+
     def __init__(self, conn) -> None:
         self._conn = conn
 

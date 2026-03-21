@@ -10,6 +10,12 @@ type Row = tuple | dict[str, object]
 
 
 class Table(ABC):
+    """Abstract base class for test table helpers.
+
+    Provides create, insert, delete, assert_table_equals, and assert_table_contains.
+    Use a database-specific subclass: DuckDBTable, PostgresTable, RedshiftTable, or AthenaTable.
+    """
+
     def __init__(self, conn, schema: str, name: str, columns: ColumnSpec):
         self._conn = conn
         self._schema = schema

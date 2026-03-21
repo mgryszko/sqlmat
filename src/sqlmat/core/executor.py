@@ -23,6 +23,12 @@ from sqlmat.core.transformation import (
 
 
 class Executor:
+    """Orchestrates transformation execution against a database adapter.
+
+    Renders Jinja2 SQL templates, manages the drop-and-recreate lifecycle, and emits
+    structured events for logging and monitoring.
+    """
+
     def __init__(self, adapter: Adapter, event_handler: EventHandler = noop_handler):
         self._adapter = adapter
         self._template_engine = TemplateEngine()
@@ -33,6 +39,12 @@ class Executor:
         operation: FullRefreshTableTransformation | IncrementalTableTransformation | Unload | Copy,
         template_context: dict | None = None,
     ) -> None:
+        """Run a transformation, unload, or copy operation.
+
+        Args:
+            operation: The operation to execute.
+            template_context: Optional dict of Jinja2 template parameters merged with implicit parameters.
+        """
         if template_context is None:
             template_context = {}
 

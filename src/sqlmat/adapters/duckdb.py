@@ -18,6 +18,8 @@ from sqlmat.core.events import (
 
 
 class DuckDBAdapter(Adapter):
+    """Adapter for DuckDB. Accepts a duckdb.DuckDBPyConnection."""
+
     def __init__(self, conn, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
         self._conn = conn

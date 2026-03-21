@@ -18,6 +18,8 @@ from sqlmat.core.events import (
 
 
 class RedshiftAdapter(Adapter):
+    """Adapter for AWS Redshift. Accepts a DB-API 2.0 connection (redshift-connector, psycopg2, or psycopg 3)."""
+
     def __init__(self, conn, event_handler: EventHandler = noop_handler):
         super().__init__(event_handler)
         self._conn = conn

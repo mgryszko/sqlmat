@@ -12,6 +12,11 @@ __all__ = ["Files", "normalize_path"]
 
 
 class Files:
+    """Approval-test helpers for verifying exported file contents (parquet, CSV, JSON).
+
+    Supports local paths and remote URIs (e.g. s3://) via fsspec. Requires the sqlmat[test] extra.
+    """
+
     def __init__(self, path: Path | str):
         self.path = path
 
