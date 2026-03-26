@@ -1,12 +1,6 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 from sqlmat.core.events import Event, EventHandler, noop_handler
-
-if TYPE_CHECKING:
-    from sqlmat.core.executor import Executor
 
 TARGET_TABLE_ALIAS = "target"
 SOURCE_TABLE_ALIAS = "source"
@@ -18,7 +12,7 @@ class Adapter(ABC):
     def __init__(self, event_handler: EventHandler = noop_handler):
         self._event_handler = event_handler
 
-    def executor(self) -> Executor:
+    def executor(self) -> "Executor":
         from sqlmat.core.executor import Executor
 
         return Executor(self, event_handler=self._event_handler)
