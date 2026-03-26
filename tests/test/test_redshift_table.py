@@ -43,6 +43,28 @@ def test_insert_tuples(conn: redshift_connector.Connection, registry: SchemaRegi
     )
 
 
+def test_insert_tuples_with_wrapped_column(conn: redshift_connector.Connection, registry: SchemaRegistry, schema: str) -> None:
+    table = RedshiftTable(conn, schema, "events", [("id", "integer"), ("payload", "super", "json_parse({})")]).create(registry)
+
+    table.insert([(1, '{"key": "value"}'), (2, '{"key": "other"}')])
+
+    table.assert_table_equals(
+        [{"id": 1, "payload": '{"key":"value"}'}, {"id": 2, "payload": '{"key":"other"}'}],
+        order_by=["id"],
+    )
+
+
+def test_insert_dicts_with_wrapped_column(conn: redshift_connector.Connection, registry: SchemaRegistry, schema: str) -> None:
+    table = RedshiftTable(conn, schema, "events", [("id", "integer"), ("payload", "super", "json_parse({})")]).create(registry)
+
+    table.insert([{"id": 1, "payload": '{"key": "value"}'}, {"id": 2, "payload": '{"key": "other"}'}])
+
+    table.assert_table_equals(
+        [{"id": 1, "payload": '{"key":"value"}'}, {"id": 2, "payload": '{"key":"other"}'}],
+        order_by=["id"],
+    )
+
+
 def test_insert_dicts(conn: redshift_connector.Connection, registry: SchemaRegistry, schema: str) -> None:
     table = RedshiftTable(conn, schema, "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]).create(registry)
 

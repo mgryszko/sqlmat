@@ -12,7 +12,7 @@ sqlmat is a lightweight SQL transformation library inspired by dbt, focused on s
 
 **IMPORTANT**: All changes must be verified by running all tests (`uv run pytest -n auto`) before considering the work complete. Only run a single test file or a specific test when the change is very localized and unlikely to affect other parts of the codebase.
 
-- Use the testing framework from `sqlmat.test` (`SchemaRegistry`, `Table`, `ColumnSpec`). `SchemaRegistry` manages creation/teardown of test schemas and tracks created tables. `Table` provides helpers for creating tables, inserting rows, and asserting on table contents (`assert_table_equals`, `assert_table_contains`)
+- Use the testing framework from `sqlmat.test` (`SchemaRegistry`, `Table`, `ColumnSpec`). `SchemaRegistry` manages creation/teardown of test schemas and tracks created tables. `Table` provides helpers for creating tables, inserting rows, and asserting on table contents (`assert_table_equals`, `assert_table_contains`). A `ColumnSpec` entry is either `(name, type)` or `(name, type, wrapper)` where `wrapper` is a SQL function template with `{}` as the placeholder (e.g., `("payload", "super", "json_parse({})")` for Redshift `super` columns)
 - **Always use `Table.assert_table_equals` for table assertions** — never use raw cursor queries (`cursor.fetchall()`, `conn.execute(...).fetchall()`) to assert on table contents. For tables created by operations like Copy, create a `Table` object (without calling `.create()`) and use it for assertions
 - Use plain functions, not test classes
 - Prefer asserting on complete objects rather than individual properties
@@ -101,4 +101,4 @@ uv run ruff format
 - **Single transformations**: No dependency graph or DAG execution
 - **Minimal __init__.py files**: Only use `__init__.py` to define public API exports; internal packages (like `core`) don't need them
 - **Adapter decoupled from transformations**: Adapter methods receive plain parameters (primitives, dicts), not transformation objects
-- **Protected class members**: Class variables and methods not exposed to the outside world should be marked as class-protected with a single underscore prefix (e.g., `self._adapter`, `self._emit`)
+- **Protected members**: Class variables, methods, and module-level functions not exposed to the outside world should be marked with a single underscore prefix (e.g., `self._adapter`, `self._emit`, `def _helper()`)

@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from sqlmat.paths import normalize_path
 from sqlmat.test.schema_registry import SchemaRegistry
 
-type ColumnSpec = list[tuple[str, str]]
+
+@dataclass(frozen=True)
+class Column:
+    name: str
+    type: str
+    wrapper: str | None = None
+
+    def placeholder(self, raw: str) -> str:
+        if self.wrapper:
+            return self.wrapper.format(raw)
+        return raw
+
+
+type ColumnEntry = tuple[str, str] | tuple[str, str, str]
+type ColumnSpec = list[ColumnEntry]
 type Row = tuple | dict[str, object]
 
 
@@ -20,7 +35,7 @@ class Table(ABC):
         self._conn = conn
         self._schema = schema
         self._name = name
-        self._columns = columns
+        self._columns = [Column(*c) for c in columns]
 
     @property
     def schema(self) -> str:
@@ -75,7 +90,7 @@ class Table(ABC):
             assert row in actual_sorted, f"Expected row not found: {row}"
 
     def _fetch_as_dicts(self, columns: list[str] | None = None) -> list[dict[str, object]]:
-        cols = columns if columns else [name for name, _ in self._columns]
+        cols = columns if columns else [c.name for c in self._columns]
         cur = self._cursor()
         cur.execute(f"select {', '.join(cols)} from {self.qualified_name}")
         return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
@@ -172,16 +187,16 @@ class AthenaTable(Table):
         return self._conn.cursor()
 
 
-def _create_native_table(cursor, table_qualified_name: str, columns: ColumnSpec, registry: SchemaRegistry) -> None:
-    cols = ", ".join(f"{name} {typ}" for name, typ in columns)
+def _create_native_table(cursor, table_qualified_name: str, columns: list[Column], registry: SchemaRegistry) -> None:
+    cols = ", ".join(f"{c.name} {c.type}" for c in columns)
     cursor.execute(f"create table {table_qualified_name} ({cols})")
     registry.register(table_qualified_name)
 
 
 def _create_iceberg_table(
-    cursor, table_qualified_name: str, columns: ColumnSpec, location: str, registry: SchemaRegistry
+    cursor, table_qualified_name: str, columns: list[Column], location: str, registry: SchemaRegistry
 ) -> None:
-    cols = ", ".join(f"{name} {typ}" for name, typ in columns)
+    cols = ", ".join(f"{c.name} {c.type}" for c in columns)
     sql = f"create table {table_qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
     cursor.execute(sql)
     registry.register(table_qualified_name)
@@ -192,29 +207,29 @@ def _insert_positional_params(
     qualified_table_name: str,
     rows: list[tuple | dict[str, object]],
     defaults: dict[str, object] | None,
-    columns: ColumnSpec,
+    columns: list[Column],
     placeholder: str,
 ) -> None:
     for row in rows:
         if isinstance(row, tuple):
-            placeholders = ", ".join(placeholder for _ in row)
+            placeholders = ", ".join(c.placeholder(placeholder) for c in columns)
             sql = f"insert into {qualified_table_name} values ({placeholders})"
             cursor.execute(sql, list(row))
         else:
             merged = {**(defaults or {}), **row}
-            column_names = [name for name, _ in columns]
+            column_names = [c.name for c in columns]
             col_list = ", ".join(column_names)
-            placeholders = ", ".join(placeholder for _ in column_names)
-            values = [merged[c] for c in column_names]
+            placeholders = ", ".join(c.placeholder(placeholder) for c in columns)
+            values = [merged[n] for n in column_names]
             sql = f"insert into {qualified_table_name} ({col_list}) values ({placeholders})"
             cursor.execute(sql, values)
 
 
 def _insert_named_params(
-    cursor, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: ColumnSpec
+    cursor, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: list[Column]
 ) -> None:
-    column_names = [name for name, _ in columns]
-    placeholders = ", ".join(f"%({name})s" for name in column_names)
+    column_names = [c.name for c in columns]
+    placeholders = ", ".join(c.placeholder(f"%({c.name})s") for c in columns)
     sql = f"insert into {qualified_table_name} ({', '.join(column_names)}) values ({placeholders})"
     for row in rows:
         if isinstance(row, tuple):

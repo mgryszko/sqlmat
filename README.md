@@ -298,6 +298,21 @@ with SchemaRegistry(conn) as registry:
 
 Rows can be inserted as tuples (positional) or dicts (by column name, with optional defaults).
 
+#### Column wrappers
+
+Columns can specify an optional wrapper function as a third tuple element. The `{}` in the wrapper is replaced with the database placeholder. This is useful for Redshift `super` columns that require `json_parse()` on insert:
+
+```python
+from sqlmat.test import RedshiftTable
+
+table = RedshiftTable(conn, schema, "events", [
+    ("id", "integer"),
+    ("payload", "super", "json_parse({})"),
+])
+table.create(registry)
+table.insert([{"id": 1, "payload": '{"key": "value"}'}])
+```
+
 ### Files
 
 Approval-test helpers for verifying exported file contents:
