@@ -7,7 +7,7 @@ from sqlmat.core.transformation import (
     Unload,
 )
 from sqlmat.paths import normalize_path
-from sqlmat.sinks import PythonLoggingSink
+from sqlmat.sinks import PythonLoggingSink, event_message
 
 __all__ = [
     "Copy",
@@ -17,5 +17,6 @@ __all__ = [
     "IncrementalTableTransformation",
     "PythonLoggingSink",
     "Unload",
+    "event_message",
     "normalize_path",
 ]

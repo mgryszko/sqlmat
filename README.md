@@ -245,13 +245,16 @@ High-level events (`TransformationStarted/Completed/Failed`, `CopyStarted/Comple
 
 ### Custom event handler
 
+You can write a fully custom handler, or use `event_message` to reuse the built-in message formatting with your own log-level routing or output target:
+
 ```python
+from sqlmat import event_message
 from sqlmat.core.events import TransformationCompleted
 
 def my_handler(event):
     match event:
-        case TransformationCompleted(target_schema=s, target_table=t):
-            print(f"Done: {s}.{t}")
+        case TransformationCompleted():
+            print(event_message(event))
 
 executor = Executor(adapter, event_handler=my_handler)
 ```
