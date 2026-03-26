@@ -47,15 +47,16 @@ def test_copy_parquet(
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, PARQUET_ROWS)
 
-    class ParquetCopy(Copy):
-        source = s3_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(ParquetCopy())
+    executor.run(
+        Copy(
+            source=s3_path,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     RedshiftTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -77,15 +78,16 @@ def test_copy_multiple_parquet_files(
     write_parquet_s3(f"{copy_s3_uri}part1.parquet", [{"user_id": 1, "event_date": "2024-01-01", "event_count": 5}])
     write_parquet_s3(f"{copy_s3_uri}part2.parquet", [{"user_id": 2, "event_date": "2024-01-02", "event_count": 3}])
 
-    class MultiParquetCopy(Copy):
-        source = copy_s3_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(MultiParquetCopy())
+    executor.run(
+        Copy(
+            source=copy_s3_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     RedshiftTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -107,15 +109,16 @@ def test_copy_csv(
     s3_path = f"{copy_s3_uri}data.csv"
     write_csv_s3(s3_path, CSV_ROWS)
 
-    class CsvCopy(Copy):
-        source = s3_path
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'", "IGNOREHEADER 1"]
-
-    executor.run(CsvCopy())
+    executor.run(
+        Copy(
+            source=s3_path,
+            target_schema=schema,
+            target_table="imported",
+            format="csv",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'", "IGNOREHEADER 1"],
+        )
+    )
 
     RedshiftTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -137,15 +140,16 @@ def test_copy_json(
     s3_path = f"{copy_s3_uri}data.json"
     write_jsonl_s3(s3_path, PARQUET_ROWS)
 
-    class JsonCopy(Copy):
-        source = s3_path
-        target_schema = schema
-        target_table = "imported"
-        format = "json"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(JsonCopy())
+    executor.run(
+        Copy(
+            source=s3_path,
+            target_schema=schema,
+            target_table="imported",
+            format="json",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     RedshiftTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -167,28 +171,30 @@ def test_copy_overwrites_existing_table(
     old_path = f"{copy_s3_uri}old.parquet"
     write_parquet_s3(old_path, [{"user_id": 99, "event_date": "2024-01-01", "event_count": 0}])
 
-    class FirstCopy(Copy):
-        source = old_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(FirstCopy())
+    executor.run(
+        Copy(
+            source=old_path,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     new_path = f"{copy_s3_uri}new.parquet"
     write_parquet_s3(new_path, PARQUET_ROWS)
 
-    class SecondCopy(Copy):
-        source = new_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(SecondCopy())
+    executor.run(
+        Copy(
+            source=new_path,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     RedshiftTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -206,12 +212,13 @@ def test_copy_requires_columns(
     copy_s3_uri: str,
     redshift_env: RedshiftEnv,
 ) -> None:
-    class NocolsCopy(Copy):
-        source = f"{copy_s3_uri}data.parquet"
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
     with pytest.raises(ValueError, match="Redshift adapter requires columns"):
-        executor.run(NocolsCopy())
+        executor.run(
+            Copy(
+                source=f"{copy_s3_uri}data.parquet",
+                target_schema=schema,
+                target_table="imported",
+                format="parquet",
+                options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+            )
+        )

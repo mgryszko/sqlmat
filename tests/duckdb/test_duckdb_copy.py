@@ -36,13 +36,7 @@ def test_copy_parquet(
     path = str(tmp_path / "data.parquet")
     pl.DataFrame(ROWS).write_parquet(path)
 
-    class ParquetCopy(Copy):
-        source = path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
-    executor.run(ParquetCopy())
+    executor.run(Copy(source=path, target_schema=schema, target_table="imported", format="parquet"))
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -67,13 +61,7 @@ def test_copy_csv(
             ]
         )
 
-    class CsvCopy(Copy):
-        source = str(path)
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-
-    executor.run(CsvCopy())
+    executor.run(Copy(source=str(path), target_schema=schema, target_table="imported", format="csv"))
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -91,13 +79,7 @@ def test_copy_multiple_parquet_files(
     pl.DataFrame([{"user_id": 2, "event_date": "2024-01-02", "event_count": 3}]).write_parquet(tmp_path / "part2.parquet")
     glob_path = str(tmp_path / "*.parquet")
 
-    class MultiFileCopy(Copy):
-        source = glob_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
-    executor.run(MultiFileCopy())
+    executor.run(Copy(source=glob_path, target_schema=schema, target_table="imported", format="parquet"))
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -116,13 +98,7 @@ def test_copy_json(
         for row in ROWS:
             f.write(json.dumps(row) + "\n")
 
-    class JsonCopy(Copy):
-        source = str(path)
-        target_schema = schema
-        target_table = "imported"
-        format = "json"
-
-    executor.run(JsonCopy())
+    executor.run(Copy(source=str(path), target_schema=schema, target_table="imported", format="json"))
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -141,14 +117,15 @@ def test_copy_csv_with_options(
         f.write("1|2024-01-01|5\n")
         f.write("2|2024-01-02|3\n")
 
-    class PipeCsvCopy(Copy):
-        source = str(path)
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        options = ["delim='|'", "header=false", "columns={'user_id': 'INTEGER', 'event_date': 'VARCHAR', 'event_count': 'INTEGER'}"]
-
-    executor.run(PipeCsvCopy())
+    executor.run(
+        Copy(
+            source=str(path),
+            target_schema=schema,
+            target_table="imported",
+            format="csv",
+            options=["delim='|'", "header=false", "columns={'user_id': 'INTEGER', 'event_date': 'VARCHAR', 'event_count': 'INTEGER'}"],
+        )
+    )
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -165,24 +142,12 @@ def test_copy_overwrites_existing_table(
     path1 = str(tmp_path / "old.parquet")
     pl.DataFrame([{"user_id": 99, "event_count": 0}]).write_parquet(path1)
 
-    class FirstCopy(Copy):
-        source = path1
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
-    executor.run(FirstCopy())
+    executor.run(Copy(source=path1, target_schema=schema, target_table="imported", format="parquet"))
 
     path2 = str(tmp_path / "new.parquet")
     pl.DataFrame(ROWS).write_parquet(path2)
 
-    class SecondCopy(Copy):
-        source = path2
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
-    executor.run(SecondCopy())
+    executor.run(Copy(source=path2, target_schema=schema, target_table="imported", format="parquet"))
 
     DuckDBTable(conn, schema, "imported", COLUMNS).assert_table_equals(
         [
@@ -194,11 +159,12 @@ def test_copy_overwrites_existing_table(
 
 
 def test_copy_error_on_missing_file(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
-    class MissingFileCopy(Copy):
-        source = str(tmp_path / "nonexistent.parquet")
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
     with pytest.raises(duckdb.IOException):
-        executor.run(MissingFileCopy())
+        executor.run(
+            Copy(
+                source=str(tmp_path / "nonexistent.parquet"),
+                target_schema=schema,
+                target_table="imported",
+                format="parquet",
+            )
+        )

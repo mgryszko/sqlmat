@@ -37,14 +37,15 @@ def test_copy_parquet(
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, PARQUET_ROWS)
 
-    class ParquetCopy(Copy):
-        source = copy_s3_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-
-    executor.run(ParquetCopy())
+    executor.run(
+        Copy(
+            source=copy_s3_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+        ),
+    )
 
     AthenaTable(conn, schema, "imported", COLUMNS, s3_table_base_uri).assert_table_equals(
         [
@@ -66,15 +67,16 @@ def test_copy_csv(
     s3_path = f"{copy_s3_uri}data.csv"
     write_csv_s3(s3_path, CSV_ROWS)
 
-    class CsvCopy(Copy):
-        source = copy_s3_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        columns = COLUMNS
-        options = ["'skip.header.line.count'='1'"]
-
-    executor.run(CsvCopy())
+    executor.run(
+        Copy(
+            source=copy_s3_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="csv",
+            columns=COLUMNS,
+            options=["'skip.header.line.count'='1'"],
+        ),
+    )
 
     AthenaTable(conn, schema, "imported", COLUMNS, s3_table_base_uri).assert_table_equals(
         [
@@ -96,14 +98,15 @@ def test_copy_json(
     s3_path = f"{copy_s3_uri}data.json"
     write_jsonl_s3(s3_path, PARQUET_ROWS)
 
-    class JsonCopy(Copy):
-        source = copy_s3_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "json"
-        columns = COLUMNS
-
-    executor.run(JsonCopy())
+    executor.run(
+        Copy(
+            source=copy_s3_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="json",
+            columns=COLUMNS,
+        ),
+    )
 
     AthenaTable(conn, schema, "imported", COLUMNS, s3_table_base_uri).assert_table_equals(
         [
@@ -125,26 +128,28 @@ def test_copy_overwrites_existing_table(
     old_uri = f"{copy_s3_uri}old/"
     write_parquet_s3(f"{old_uri}data.parquet", [{"user_id": 99, "event_date": "2024-01-01", "event_count": 0}])
 
-    class FirstCopy(Copy):
-        source = old_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-
-    executor.run(FirstCopy())
+    executor.run(
+        Copy(
+            source=old_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+        ),
+    )
 
     new_uri = f"{copy_s3_uri}new/"
     write_parquet_s3(f"{new_uri}data.parquet", PARQUET_ROWS)
 
-    class SecondCopy(Copy):
-        source = new_uri
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-
-    executor.run(SecondCopy())
+    executor.run(
+        Copy(
+            source=new_uri,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+        ),
+    )
 
     AthenaTable(conn, schema, "imported", COLUMNS, s3_table_base_uri).assert_table_equals(
         [
@@ -161,11 +166,12 @@ def test_copy_requires_columns(
     schema: str,
     copy_s3_uri: str,
 ) -> None:
-    class NocolsCopy(Copy):
-        source = f"{copy_s3_uri}data.parquet"
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-
     with pytest.raises(ValueError, match="Athena adapter requires columns"):
-        executor.run(NocolsCopy())
+        executor.run(
+            Copy(
+                source=f"{copy_s3_uri}data.parquet",
+                target_schema=schema,
+                target_table="imported",
+                format="parquet",
+            ),
+        )

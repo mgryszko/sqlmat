@@ -23,19 +23,21 @@ def test_full_refresh_templated(
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
-    class TemplatedTransform(FullRefreshTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        sql = """
+    executor.run(
+        FullRefreshTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="""
         select
             user_id,
             max(event_date) as event_date,
             sum(event_count) as event_count
         from {{ source_table }}
         group by user_id
-        """
-
-    executor.run(TemplatedTransform(), template_context={"source_table": src_table.qualified_name})
+        """,
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -49,12 +51,13 @@ def test_full_refresh_templated(
 def test_full_refresh_non_templated(
     conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
-    class NonTemplatedTransform(FullRefreshTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        sql = "select 42 as user_id, '2024-01-01'::date as event_date, 100 as event_count"
-
-    executor.run(NonTemplatedTransform())
+    executor.run(
+        FullRefreshTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="select 42 as user_id, '2024-01-01'::date as event_date, 100 as event_count",
+        )
+    )
 
     tgt_table.assert_table_equals([{"user_id": 42, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
 
@@ -64,15 +67,16 @@ def test_delete_insert_single_unique_key(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        strategy="delete_insert",
+        unique_key="user_id",
+        sql="select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id",
+    )
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -85,7 +89,7 @@ def test_delete_insert_single_unique_key(
 
     src_table.delete()
     src_table.insert([(3, "2024-01-03", 35), (4, "2024-01-04", 40)])
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -104,14 +108,15 @@ def test_delete_insert_composite_unique_key(
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = ["user_id", "event_date"]
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        strategy="delete_insert",
+        unique_key=["user_id", "event_date"],
+        sql="select user_id, event_date, event_count from {{ source_table }}",
+    )
 
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -127,7 +132,7 @@ def test_delete_insert_composite_unique_key(
 
     src_table.delete()
     src_table.insert([(1, "2024-01-03", 31), (2, "2024-01-03", 36), (1, "2024-01-04", 40), (2, "2024-01-04", 45)])
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -150,15 +155,17 @@ def test_delete_insert_with_incremental_predicates_single_string(
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        incremental_predicates = f"{TARGET_TABLE_ALIAS}.event_count > 15"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key="user_id",
+            incremental_predicates=f"{TARGET_TABLE_ALIAS}.event_count > 15",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -177,15 +184,17 @@ def test_delete_insert_with_incremental_predicates_list(
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = ["user_id", "event_date"]
-        incremental_predicates = [f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"]
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key=["user_id", "event_date"],
+            incremental_predicates=[f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"],
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -204,14 +213,16 @@ def test_delete_insert_target_table_does_not_exist(
     conn.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key="user_id",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -227,14 +238,16 @@ def test_delete_insert_target_table_does_not_exist(
 def test_delete_insert_without_unique_key_raises_error(executor: Executor, schema: str, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = schema
-        target_table = "bad_incremental"
-        strategy = "delete_insert"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
     with pytest.raises(ValueError, match="unique_key is required for delete_insert materialization"):
-        executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+        executor.run(
+            IncrementalTableTransformation(
+                target_schema=schema,
+                target_table="bad_incremental",
+                strategy="delete_insert",
+                sql="select user_id, event_date, event_count from {{ source_table }}",
+            ),
+            template_context={"source_table": src_table.qualified_name},
+        )
 
 
 def test_merge_single_unique_key(
@@ -242,15 +255,16 @@ def test_merge_single_unique_key(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        strategy="merge",
+        unique_key="user_id",
+        sql="select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id",
+    )
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -263,7 +277,7 @@ def test_merge_single_unique_key(
 
     src_table.delete()
     src_table.insert([(3, "2024-01-03", 35), (4, "2024-01-04", 40)])
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -282,14 +296,15 @@ def test_merge_composite_unique_key(
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = ["user_id", "event_date"]
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        strategy="merge",
+        unique_key=["user_id", "event_date"],
+        sql="select user_id, event_date, event_count from {{ source_table }}",
+    )
 
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -305,7 +320,7 @@ def test_merge_composite_unique_key(
 
     src_table.delete()
     src_table.insert([(1, "2024-01-03", 31), (2, "2024-01-03", 36), (1, "2024-01-04", 40), (2, "2024-01-04", 45)])
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
 
     tgt_table.assert_table_equals(
         [
@@ -328,15 +343,17 @@ def test_merge_with_incremental_predicates_single_string(
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        incremental_predicates = f"{TARGET_TABLE_ALIAS}.event_count > 15"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="merge",
+            unique_key="user_id",
+            incremental_predicates=f"{TARGET_TABLE_ALIAS}.event_count > 15",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -355,15 +372,17 @@ def test_merge_with_incremental_predicates_list(
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = ["user_id", "event_date"]
-        incremental_predicates = [f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"]
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="merge",
+            unique_key=["user_id", "event_date"],
+            incremental_predicates=[f"{TARGET_TABLE_ALIAS}.event_date >= '2024-01-02'", f"{TARGET_TABLE_ALIAS}.event_count > 10"],
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -381,14 +400,16 @@ def test_merge_target_table_does_not_exist(
 ) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="merge",
+            unique_key="user_id",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -404,14 +425,16 @@ def test_merge_target_table_does_not_exist(
 def test_merge_without_unique_key_raises_error(executor: Executor, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = src_table.schema
-        target_table = "bad_merge"
-        strategy = "merge"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
     with pytest.raises(ValueError, match="unique_key is required for merge materialization"):
-        executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+        executor.run(
+            IncrementalTableTransformation(
+                target_schema=src_table.schema,
+                target_table="bad_merge",
+                strategy="merge",
+                sql="select user_id, event_date, event_count from {{ source_table }}",
+            ),
+            template_context={"source_table": src_table.qualified_name},
+        )
 
 
 def test_full_refresh_rollback_on_error(
@@ -419,13 +442,14 @@ def test_full_refresh_rollback_on_error(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
-    class FailingTransform(FullRefreshTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        sql = "select * from nonexistent_table"
-
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(FailingTransform())
+        executor.run(
+            FullRefreshTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                sql="select * from nonexistent_table",
+            )
+        )
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
     tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
@@ -436,15 +460,16 @@ def test_delete_insert_rollback_on_error(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
-    class FailingTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select * from nonexistent_table"
-
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(FailingTransform())
+        executor.run(
+            IncrementalTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                strategy="delete_insert",
+                unique_key="user_id",
+                sql="select * from nonexistent_table",
+            )
+        )
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
     tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
@@ -456,15 +481,16 @@ def test_merge_rollback_on_error(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
-    class FailingTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        sql = "select * from nonexistent_table"
-
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(FailingTransform())
+        executor.run(
+            IncrementalTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                strategy="merge",
+                unique_key="user_id",
+                sql="select * from nonexistent_table",
+            )
+        )
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
     tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])

@@ -26,19 +26,21 @@ def test_full_refresh(
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
-    class TemplatedTransform(FullRefreshTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        sql = """
+    executor.run(
+        FullRefreshTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="""
         select
             user_id,
             max(event_date) as event_date,
             sum(event_count) as event_count
         from {{ source_table }}
         group by user_id
-        """
-
-    executor.run(TemplatedTransform(), template_context={"source_table": src_table.qualified_name})
+        """,
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -54,15 +56,17 @@ def test_delete_insert_single_unique_key(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
-
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key="user_id",
+            sql="select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -80,14 +84,16 @@ def test_delete_insert_composite_unique_key(
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = ["user_id", "event_date"]
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key=["user_id", "event_date"],
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -108,14 +114,16 @@ def test_delete_insert_target_table_does_not_exist(
     conn.cursor().execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    class DeleteInsertTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-
-    executor.run(DeleteInsertTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key="user_id",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -133,15 +141,17 @@ def test_merge(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
-    class MergeTransform(IncrementalTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        sql = "select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id"
-
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(MergeTransform(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="merge",
+            unique_key="user_id",
+            sql="select user_id, max(event_date) as event_date, sum(event_count) as event_count from {{ source_table }} group by user_id",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     tgt_table.assert_table_equals(
         [
@@ -158,13 +168,14 @@ def test_full_refresh_rollback_on_error(
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
-    class FailingTransform(FullRefreshTableTransformation):
-        target_schema = tgt_table.schema
-        target_table = tgt_table.name
-        sql = "select * from nonexistent_table"
-
     with pytest.raises(psycopg2.errors.UndefinedTable):
-        executor.run(FailingTransform())
+        executor.run(
+            FullRefreshTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                sql="select * from nonexistent_table",
+            )
+        )
 
     assert adapter.table_exists(tgt_table.schema, tgt_table.name)
     tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
@@ -177,22 +188,25 @@ def test_copy_csv(
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["user_id", "event_date", "event_count"], lineterminator="\n")
         writer.writeheader()
-        writer.writerows([
-            {"user_id": 1, "event_date": "2024-01-01", "event_count": 5},
-            {"user_id": 2, "event_date": "2024-01-02", "event_count": 3},
-        ])
+        writer.writerows(
+            [
+                {"user_id": 1, "event_date": "2024-01-01", "event_count": 5},
+                {"user_id": 2, "event_date": "2024-01-02", "event_count": 3},
+            ]
+        )
 
     copy_columns = [("user_id", "bigint"), ("event_date", "varchar"), ("event_count", "bigint")]
 
-    class CsvCopy(Copy):
-        source = str(path)
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        columns = copy_columns
-        options = ["header"]
-
-    executor.run(CsvCopy())
+    executor.run(
+        Copy(
+            source=str(path),
+            target_schema=schema,
+            target_table="imported",
+            format="csv",
+            columns=copy_columns,
+            options=["header"],
+        )
+    )
 
     PostgresTable(conn, schema, "imported", copy_columns).assert_table_equals(
         [
@@ -203,19 +217,19 @@ def test_copy_csv(
     )
 
 
-def test_unload_csv(
-    executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path
-) -> None:
+def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.csv")
 
-    class CsvUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = output_path
-        format = "csv"
-        options = ["header"]
-
-    executor.run(CsvUnload(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        Unload(
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            destination=output_path,
+            format="csv",
+            options=["header"],
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     Files(output_path).approve_csv(header=True, sort_columns=["user_id"])

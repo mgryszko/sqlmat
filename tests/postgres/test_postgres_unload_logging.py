@@ -37,13 +37,15 @@ def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: 
 
     output_path = str(tmp_path / "output.csv")
 
-    class CsvUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = output_path
-        format = "csv"
-        options = ["header"]
-
-    executor.run(CsvUnload(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        Unload(
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            destination=output_path,
+            format="csv",
+            options=["header"],
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     assert events == [
         unload_started(output_path, "csv"),
@@ -56,13 +58,14 @@ def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: 
 def test_unload_error_events(executor: Executor, tmp_path: pathlib.Path, events: list[Event]) -> None:
     output_path = str(tmp_path / "output.csv")
 
-    class BadUnload(Unload):
-        sql = "select * from nonexistent_table"
-        destination = output_path
-        format = "csv"
-
     with pytest.raises(psycopg.errors.UndefinedTable):
-        executor.run(BadUnload())
+        executor.run(
+            Unload(
+                sql="select * from nonexistent_table",
+                destination=output_path,
+                format="csv",
+            )
+        )
 
     assert events == [
         unload_started(output_path, "csv"),

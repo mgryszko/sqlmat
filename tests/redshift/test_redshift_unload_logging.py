@@ -40,13 +40,15 @@ def test_unload_events(
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
-    class ParquetUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = unload_s3_uri
-        format = "parquet"
-        options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
-
-    executor.run(ParquetUnload(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        Unload(
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            destination=unload_s3_uri,
+            format="parquet",
+            options=[f"IAM_ROLE '{redshift_env.unload_iam_role}'"],
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     assert events == [
         unload_started(unload_s3_uri, "parquet"),
@@ -57,14 +59,15 @@ def test_unload_events(
 
 
 def test_unload_error_events(executor: Executor, events: list[Event], unload_s3_uri: str, redshift_env: RedshiftEnv) -> None:
-    class BadUnload(Unload):
-        sql = "select * from nonexistent_table"
-        destination = unload_s3_uri
-        format = "parquet"
-        options = [f"IAM_ROLE '{redshift_env.unload_iam_role}'"]
-
     with pytest.raises(redshift_connector.error.ProgrammingError):
-        executor.run(BadUnload())
+        executor.run(
+            Unload(
+                sql="select * from nonexistent_table",
+                destination=unload_s3_uri,
+                format="parquet",
+                options=[f"IAM_ROLE '{redshift_env.unload_iam_role}'"],
+            )
+        )
 
     assert events == [
         unload_started(unload_s3_uri, "parquet"),

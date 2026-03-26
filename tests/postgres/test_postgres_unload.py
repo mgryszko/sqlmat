@@ -24,13 +24,15 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Tab
 
     output_path = str(tmp_path / "output.csv")
 
-    class CsvUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = output_path
-        format = "csv"
-        options = ["header"]
-
-    executor.run(CsvUnload(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        Unload(
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            destination=output_path,
+            format="csv",
+            options=["header"],
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     Files(output_path).approve_csv(header=True, sort_columns=["user_id"])
 
@@ -40,13 +42,15 @@ def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegi
 
     output_path = str(tmp_path / "output.csv")
 
-    class PipeCsvUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = output_path
-        format = "csv"
-        options = ["header", "delimiter '|'"]
-
-    executor.run(PipeCsvUnload(), template_context={"source_table": src_table.qualified_name})
+    executor.run(
+        Unload(
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            destination=output_path,
+            format="csv",
+            options=["header", "delimiter '|'"],
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
 
     Files(output_path).approve_csv(header=True, delimiter="|")
 
@@ -54,13 +58,14 @@ def test_unload_csv_with_custom_options(executor: Executor, registry: SchemaRegi
 def test_unload_error_on_invalid_sql(executor: Executor, tmp_path: pathlib.Path) -> None:
     output_path = str(tmp_path / "output.csv")
 
-    class BadUnload(Unload):
-        sql = "select * from nonexistent_table"
-        destination = output_path
-        format = "csv"
-
     with pytest.raises(psycopg.errors.UndefinedTable):
-        executor.run(BadUnload())
+        executor.run(
+            Unload(
+                sql="select * from nonexistent_table",
+                destination=output_path,
+                format="csv",
+            )
+        )
 
     assert not (tmp_path / "output.csv").exists()
 
@@ -70,10 +75,12 @@ def test_unload_rejects_non_csv_format(executor: Executor, registry: SchemaRegis
 
     output_path = str(tmp_path / "output.parquet")
 
-    class ParquetUnload(Unload):
-        sql = "select user_id, event_date, event_count from {{ source_table }}"
-        destination = output_path
-        format = "parquet"
-
     with pytest.raises(ValueError, match="only supports CSV"):
-        executor.run(ParquetUnload(), template_context={"source_table": src_table.qualified_name})
+        executor.run(
+            Unload(
+                sql="select user_id, event_date, event_count from {{ source_table }}",
+                destination=output_path,
+                format="parquet",
+            ),
+            template_context={"source_table": src_table.qualified_name},
+        )

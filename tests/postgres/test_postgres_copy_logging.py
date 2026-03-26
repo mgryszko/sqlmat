@@ -45,15 +45,16 @@ def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, 
         writer.writeheader()
         writer.writerow({"user_id": 1, "event_date": "2024-01-01", "event_count": 5})
 
-    class CsvCopy(Copy):
-        source = str(path)
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        columns = COLUMNS
-        options = ["header"]
-
-    executor.run(CsvCopy())
+    executor.run(
+        Copy(
+            source=str(path),
+            target_schema=schema,
+            target_table="imported",
+            format="csv",
+            columns=COLUMNS,
+            options=["header"],
+        )
+    )
 
     assert events == [
         copy_started(str(path), schema, "imported", "csv"),
@@ -69,15 +70,16 @@ def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, 
 def test_copy_error_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
     missing_path = str(tmp_path / "nonexistent.csv")
 
-    class MissingFileCopy(Copy):
-        source = missing_path
-        target_schema = schema
-        target_table = "imported"
-        format = "csv"
-        columns = COLUMNS
-
     with pytest.raises(FileNotFoundError):
-        executor.run(MissingFileCopy())
+        executor.run(
+            Copy(
+                source=missing_path,
+                target_schema=schema,
+                target_table="imported",
+                format="csv",
+                columns=COLUMNS,
+            )
+        )
 
     assert events == [
         copy_started(missing_path, schema, "imported", "csv"),

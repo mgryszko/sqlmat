@@ -77,8 +77,7 @@ class Executor:
 
         self._emit(TransformationStarted(target_schema, target_table, materialization))
 
-        full_table_name = transformation.get_full_table_name()
-        rendered_sql = self._template_engine.render(sql, template_context | {"target_table": full_table_name})
+        rendered_sql = self._template_engine.render(sql, template_context | {"target_table": transformation.full_table_name})
 
         self._emit(SqlRendered(sql=rendered_sql, target_schema=target_schema, target_table=target_table))
 

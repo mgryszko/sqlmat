@@ -48,15 +48,16 @@ def test_copy_events(
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, [{"user_id": 1, "event_date": "2024-01-01", "event_count": 5}])
 
-    class ParquetCopy(Copy):
-        source = s3_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
-    executor.run(ParquetCopy())
+    executor.run(
+        Copy(
+            source=s3_path,
+            target_schema=schema,
+            target_table="imported",
+            format="parquet",
+            columns=COLUMNS,
+            options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+        )
+    )
 
     assert events == [
         copy_started(s3_path, schema, "imported", "parquet"),
@@ -75,16 +76,17 @@ def test_copy_error_events(
     bad_path = f"{copy_s3_uri}bad_schema.parquet"
     write_parquet_s3(bad_path, [{"wrong_col": 1}])
 
-    class BadSchemaCopy(Copy):
-        source = bad_path
-        target_schema = schema
-        target_table = "imported"
-        format = "parquet"
-        columns = COLUMNS
-        options = [f"IAM_ROLE '{redshift_env.copy_iam_role}'"]
-
     with pytest.raises(redshift_connector.error.ProgrammingError):
-        executor.run(BadSchemaCopy())
+        executor.run(
+            Copy(
+                source=bad_path,
+                target_schema=schema,
+                target_table="imported",
+                format="parquet",
+                columns=COLUMNS,
+                options=[f"IAM_ROLE '{redshift_env.copy_iam_role}'"],
+            )
+        )
 
     assert events == [
         copy_started(bad_path, schema, "imported", "parquet"),

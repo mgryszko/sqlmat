@@ -35,13 +35,14 @@ Drops and recreates the target table on every run.
 from sqlmat import Executor, FullRefreshTableTransformation
 from sqlmat.adapters import DuckDBAdapter
 
-class MyTransformation(FullRefreshTableTransformation):
-    target_schema = "analytics"
-    target_table = "users"
-    sql = "select id, name from raw.users where active = {{ is_active }}"
+transformation = FullRefreshTableTransformation(
+    target_schema="analytics",
+    target_table="users",
+    sql="select id, name from raw.users where active = {{ is_active }}",
+)
 
 executor = Executor(DuckDBAdapter(conn))
-executor.run(MyTransformation(), template_context={"is_active": "true"})
+executor.run(transformation, template_context={"is_active": "true"})
 ```
 
 Implicit template parameter:
@@ -56,13 +57,13 @@ Updates the target table incrementally using either `delete_insert` or `merge` s
 ```python
 from sqlmat import IncrementalTableTransformation
 
-class MyIncremental(IncrementalTableTransformation):
-    target_schema = "analytics"
-    target_table = "events"
-    sql = "select * from raw.events where updated_at > '2024-01-01'"
-    strategy = "delete_insert"  # or "merge"
-    unique_key = "event_id"  # str or list[str]
-    incremental_predicates = None  # optional str or list[str]
+transformation = IncrementalTableTransformation(
+    target_schema="analytics",
+    target_table="events",
+    sql="select * from raw.events where updated_at > '2024-01-01'",
+    strategy="delete_insert",  # or "merge"
+    unique_key="event_id",  # str or list[str]
+)
 ```
 
 Implicit template parameter:
@@ -79,11 +80,12 @@ Exports query results to a file or external storage.
 ```python
 from sqlmat import Unload
 
-unload = Unload()
-unload.sql = "select * from analytics.users"
-unload.destination = "s3://bucket/path/"
-unload.format = "parquet"  # "parquet", "csv", or "json"
-unload.options = ["ALLOWOVERWRITE"]  # optional, adapter-specific
+unload = Unload(
+    sql="select * from analytics.users",
+    destination="s3://bucket/path/",
+    format="parquet",  # "parquet", "csv", or "json"
+    options=["ALLOWOVERWRITE"],  # optional, adapter-specific
+)
 
 executor.run(unload)
 ```
@@ -97,13 +99,14 @@ Loads data from a file or external storage into a table. The target table is dro
 ```python
 from sqlmat import Copy
 
-copy = Copy()
-copy.source = "s3://bucket/path/"
-copy.target_schema = "raw"
-copy.target_table = "events"
-copy.format = "parquet"  # "parquet", "csv", or "json"
-copy.columns = [("id", "integer"), ("name", "varchar")]  # required for Athena, Redshift, PostgreSQL
-copy.options = ["IGNOREHEADER 1"]  # optional, adapter-specific
+copy = Copy(
+    source="s3://bucket/path/",
+    target_schema="raw",
+    target_table="events",
+    format="parquet",  # "parquet", "csv", or "json"
+    columns=[("id", "integer"), ("name", "varchar")],  # required for Athena, Redshift, PostgreSQL
+    options=["IGNOREHEADER 1"],  # optional, adapter-specific
+)
 ```
 
 No template rendering is applied to Copy.
@@ -115,48 +118,52 @@ When the source CSV file contains a header row, you must tell the adapter to ski
 **Athena** - pass as a `tblproperties` entry on the external table:
 
 ```python
-class MyCopy(Copy):
-    source = "s3://bucket/prefix/"
-    target_schema = "myschema"
-    target_table = "events"
-    format = "csv"
-    columns = [("user_id", "bigint"), ("event_date", "string"), ("event_count", "bigint")]
-    options = ["'skip.header.line.count'='1'"]
+Copy(
+    source="s3://bucket/prefix/",
+    target_schema="myschema",
+    target_table="events",
+    format="csv",
+    columns=[("user_id", "bigint"), ("event_date", "string"), ("event_count", "bigint")],
+    options=["'skip.header.line.count'='1'"],
+)
 ```
 
 **Redshift** - use the `IGNOREHEADER` clause:
 
 ```python
-class MyCopy(Copy):
-    source = "s3://bucket/prefix/"
-    target_schema = "myschema"
-    target_table = "events"
-    format = "csv"
-    columns = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]
-    options = ["IAM_ROLE 'arn:aws:iam::123456789:role/MyRole'", "IGNOREHEADER 1"]
+Copy(
+    source="s3://bucket/prefix/",
+    target_schema="myschema",
+    target_table="events",
+    format="csv",
+    columns=[("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")],
+    options=["IAM_ROLE 'arn:aws:iam::123456789:role/MyRole'", "IGNOREHEADER 1"],
+)
 ```
 
 **PostgreSQL** - use the `header` option in the `COPY WITH` clause:
 
 ```python
-class MyCopy(Copy):
-    source = "/path/to/data.csv"
-    target_schema = "myschema"
-    target_table = "events"
-    format = "csv"
-    columns = [("user_id", "bigint"), ("event_date", "varchar"), ("event_count", "bigint")]
-    options = ["header"]
+Copy(
+    source="/path/to/data.csv",
+    target_schema="myschema",
+    target_table="events",
+    format="csv",
+    columns=[("user_id", "bigint"), ("event_date", "varchar"), ("event_count", "bigint")],
+    options=["header"],
+)
 ```
 
 **DuckDB** - pass `header=true` or `header=false` to `read_csv`:
 
 ```python
-class MyCopy(Copy):
-    source = "/path/to/data.csv"
-    target_schema = "myschema"
-    target_table = "events"
-    format = "csv"
-    options = ["header=true"]
+Copy(
+    source="/path/to/data.csv",
+    target_schema="myschema",
+    target_table="events",
+    format="csv",
+    options=["header=true"],
+)
 ```
 
 ## Adapters

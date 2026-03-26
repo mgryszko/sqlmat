@@ -52,10 +52,8 @@ uv run ruff format
 ### Core components
 
 **Transformation** (`src/sqlmat/core/transformation.py`)
-- Base class for SQL transformations
-- Defines `target_schema`, `target_table`, and `sql` attributes
-- Users subclass this to define their transformations
-- Instantiate transformations before passing to Executor
+- Frozen dataclasses: `FullRefreshTableTransformation`, `IncrementalTableTransformation`, `Unload`, `Copy`
+- Instantiate directly with keyword arguments, e.g. `FullRefreshTableTransformation(target_schema=..., target_table=..., sql=...)`
 
 **Executor** (`src/sqlmat/core/executor.py`)
 - Orchestrates the transformation execution
@@ -95,7 +93,7 @@ uv run ruff format
 
 ### Key design decisions
 
-- **Instantiated transformations**: `executor.run()` accepts instances, not classes, giving users control over instantiation
+- **Frozen dataclass transformations**: All transformation types are frozen dataclasses instantiated directly with keyword arguments
 - **Full-refresh only**: Always drop and recreate tables; no incremental loads yet
 - **ABC-based adapters**: Using `ABC` with `@abstractmethod` for adapter interface
 - **Single transformations**: No dependency graph or DAG execution

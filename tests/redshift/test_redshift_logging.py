@@ -38,12 +38,7 @@ def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
 
 
 def test_full_refresh_events(executor: Executor, schema: str, events: list[Event]) -> None:
-    class Transform(FullRefreshTableTransformation):
-        target_schema = schema
-        target_table = "result"
-        sql = "select 1 as id"
-
-    executor.run(Transform())
+    executor.run(FullRefreshTableTransformation(target_schema=schema, target_table="result", sql="select 1 as id"))
 
     assert events == [
         table_transformation_started(schema, "result"),
@@ -59,14 +54,15 @@ def test_full_refresh_events(executor: Executor, schema: str, events: list[Event
 def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    class Transform(IncrementalTableTransformation):
-        target_schema = schema
-        target_table = tgt_table.name
-        strategy = "delete_insert"
-        unique_key = "user_id"
-        sql = "select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count"
-
-    executor.run(Transform())
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=schema,
+            target_table=tgt_table.name,
+            strategy="delete_insert",
+            unique_key="user_id",
+            sql="select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count",
+        )
+    )
 
     assert events == [
         table_transformation_started(schema, tgt_table.name),
@@ -86,14 +82,15 @@ def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table,
 def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    class Transform(IncrementalTableTransformation):
-        target_schema = schema
-        target_table = tgt_table.name
-        strategy = "merge"
-        unique_key = "user_id"
-        sql = "select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count"
-
-    executor.run(Transform())
+    executor.run(
+        IncrementalTableTransformation(
+            target_schema=schema,
+            target_table=tgt_table.name,
+            strategy="merge",
+            unique_key="user_id",
+            sql="select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count",
+        )
+    )
 
     assert events == [
         table_transformation_started(schema, tgt_table.name),
@@ -110,13 +107,14 @@ def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events:
 
 
 def test_rollback_events(executor: Executor, schema: str, events: list[Event]) -> None:
-    class Transform(FullRefreshTableTransformation):
-        target_schema = schema
-        target_table = "result"
-        sql = "select * from nonexistent_table"
-
     with pytest.raises(redshift_connector.error.ProgrammingError):
-        executor.run(Transform())
+        executor.run(
+            FullRefreshTableTransformation(
+                target_schema=schema,
+                target_table="result",
+                sql="select * from nonexistent_table",
+            )
+        )
 
     assert events == [
         table_transformation_started(schema, "result"),

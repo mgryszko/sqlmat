@@ -193,9 +193,7 @@ def _create_native_table(cursor, table_qualified_name: str, columns: list[Column
     registry.register(table_qualified_name)
 
 
-def _create_iceberg_table(
-    cursor, table_qualified_name: str, columns: list[Column], location: str, registry: SchemaRegistry
-) -> None:
+def _create_iceberg_table(cursor, table_qualified_name: str, columns: list[Column], location: str, registry: SchemaRegistry) -> None:
     cols = ", ".join(f"{c.name} {c.type}" for c in columns)
     sql = f"create table {table_qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
     cursor.execute(sql)
