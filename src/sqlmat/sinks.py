@@ -7,9 +7,11 @@ from sqlmat.core.events import (
     DataLoaded,
     DataUnloaded,
     Event,
+    Failure,
     RowsDeleted,
     RowsInserted,
     RowsMerged,
+    SqlEvent,
     SqlExecuted,
     SqlRendered,
     TableCreated,
@@ -97,11 +99,9 @@ class PythonLoggingSink:
     def __call__(self, event: Event) -> None:
         msg = event_message(event)
         match event:
-            case CopyFailed() | TransformationFailed() | UnloadFailed():
+            case Failure():
                 self._logger.error(msg)
-            case (
-                CopyStarted() | CopyCompleted() | TransformationStarted() | TransformationCompleted() | UnloadStarted() | UnloadCompleted()
-            ):
-                self._logger.info(msg)
-            case _:
+            case SqlEvent():
                 self._logger.debug(msg)
+            case _:
+                self._logger.info(msg)

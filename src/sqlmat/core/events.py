@@ -3,6 +3,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class Failure:
+    error: Exception
+
+
+@dataclass(frozen=True)
+class SqlEvent:
+    sql: str
+
+
+@dataclass(frozen=True)
 class CopyCompleted:
     source: str
     target_schema: str
@@ -11,12 +21,11 @@ class CopyCompleted:
 
 
 @dataclass(frozen=True)
-class CopyFailed:
+class CopyFailed(Failure):
     source: str
     target_schema: str
     target_table: str
     format: str
-    error: Exception
 
 
 @dataclass(frozen=True)
@@ -28,82 +37,75 @@ class CopyStarted:
 
 
 @dataclass(frozen=True)
-class DataLoaded:
-    sql: str
+class DataLoaded(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
-class DataUnloaded:
-    sql: str
+class DataUnloaded(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
-class RowsDeleted:
+class RowsDeleted(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class RowsInserted:
+class RowsInserted(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class RowsMerged:
+class RowsMerged(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class SqlExecuted:
-    sql: str
+class SqlExecuted(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
-class SqlRendered:
-    sql: str
+class SqlRendered(SqlEvent):
     target_schema: str | None = None
     target_table: str | None = None
 
 
 @dataclass(frozen=True)
-class TableCreated:
+class TableCreated(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class TableDropped:
+class TableDropped(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class TableExistenceChecked:
+class TableExistenceChecked(SqlEvent):
     schema: str
     table: str
-    sql: str
 
 
 @dataclass(frozen=True)
-class TransactionBegun:
-    sql: str
+class TransactionBegun(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
-class TransactionCommitted:
-    sql: str
+class TransactionCommitted(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
-class TransactionRolledBack:
-    sql: str
+class TransactionRolledBack(SqlEvent):
+    pass
 
 
 @dataclass(frozen=True)
@@ -114,11 +116,10 @@ class TransformationCompleted:
 
 
 @dataclass(frozen=True)
-class TransformationFailed:
+class TransformationFailed(Failure):
     target_schema: str
     target_table: str
     materialization: str
-    error: Exception
 
 
 @dataclass(frozen=True)
@@ -135,10 +136,9 @@ class UnloadCompleted:
 
 
 @dataclass(frozen=True)
-class UnloadFailed:
+class UnloadFailed(Failure):
     destination: str
     format: str
-    error: Exception
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-from sqlmat.core.events import EventHandler
+from sqlmat.core.events import EventHandler, Failure, SqlEvent
 from sqlmat.core.executor import Executor
 from sqlmat.core.transformation import (
     Copy,
@@ -13,9 +13,11 @@ __all__ = [
     "Copy",
     "EventHandler",
     "Executor",
+    "Failure",
     "FullRefreshTableTransformation",
     "IncrementalTableTransformation",
     "PythonLoggingSink",
+    "SqlEvent",
     "Unload",
     "event_message",
     "normalize_path",

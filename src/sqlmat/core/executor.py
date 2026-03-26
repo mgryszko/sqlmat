@@ -90,7 +90,9 @@ class Executor:
                 self._run_full_refresh(target_schema, target_table, rendered_sql)
             self._emit(TransformationCompleted(target_schema, target_table, materialization))
         except Exception as e:
-            self._emit(TransformationFailed(target_schema, target_table, materialization, e))
+            self._emit(
+                TransformationFailed(error=e, target_schema=target_schema, target_table=target_table, materialization=materialization)
+            )
             raise
 
     def _run_full_refresh(self, target_schema: str, target_table: str, rendered_sql: str) -> None:
@@ -195,7 +197,7 @@ class Executor:
             self._adapter.copy_to(rendered_sql, destination, fmt, options)
             self._emit(UnloadCompleted(destination, fmt))
         except Exception as e:
-            self._emit(UnloadFailed(destination, fmt, e))
+            self._emit(UnloadFailed(error=e, destination=destination, format=fmt))
             raise
 
     def _run_copy(self, copy: Copy) -> None:
@@ -218,7 +220,7 @@ class Executor:
                 raise
             self._emit(CopyCompleted(source, schema, table, fmt))
         except Exception as e:
-            self._emit(CopyFailed(source, schema, table, fmt, e))
+            self._emit(CopyFailed(error=e, source=source, target_schema=schema, target_table=table, format=fmt))
             raise
 
     def _normalize_predicates(self, predicates: str | list[str] | None) -> list[str] | None:
