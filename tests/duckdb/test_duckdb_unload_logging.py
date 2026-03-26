@@ -10,7 +10,7 @@ from event_matchers import (
     unload_started,
 )
 
-from sqlmat import Executor, Unload
+from sqlmat import Unload
 from sqlmat.adapters import DuckDBAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import SchemaRegistry, Table
@@ -26,17 +26,14 @@ def adapter(conn: duckdb.DuckDBPyConnection, events: list[Event]) -> DuckDBAdapt
     return DuckDBAdapter(conn, event_handler=events.append)
 
 
-@pytest.fixture
-def executor(adapter: DuckDBAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_unload_events(
+    adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path, events: list[Event]
+) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
     output_path = str(tmp_path / "output.parquet")
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=output_path,
@@ -53,11 +50,11 @@ def test_unload_events(executor: Executor, registry: SchemaRegistry, src_table: 
     ]
 
 
-def test_unload_error_events(executor: Executor, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_unload_error_events(adapter: DuckDBAdapter, tmp_path: pathlib.Path, events: list[Event]) -> None:
     output_path = str(tmp_path / "output.parquet")
 
     with pytest.raises(duckdb.CatalogException):
-        executor.run(
+        adapter.executor().run(
             Unload(
                 sql="select * from nonexistent_table",
                 destination=output_path,

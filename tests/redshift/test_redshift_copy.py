@@ -3,7 +3,7 @@ import redshift_connector
 from env import RedshiftEnv
 from test.test_files import write_csv_s3, write_jsonl_s3, write_parquet_s3
 
-from sqlmat import Copy, Executor, normalize_path
+from sqlmat import Copy, normalize_path
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.test import RedshiftTable, SchemaRegistry
 
@@ -11,11 +11,6 @@ from sqlmat.test import RedshiftTable, SchemaRegistry
 @pytest.fixture
 def adapter(conn: redshift_connector.Connection) -> RedshiftAdapter:
     return RedshiftAdapter(conn)
-
-
-@pytest.fixture
-def executor(adapter: RedshiftAdapter) -> Executor:
-    return Executor(adapter)
 
 
 @pytest.fixture
@@ -37,7 +32,7 @@ CSV_ROWS = [
 
 
 def test_copy_parquet(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: redshift_connector.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -47,7 +42,7 @@ def test_copy_parquet(
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, PARQUET_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=s3_path,
             target_schema=schema,
@@ -68,7 +63,7 @@ def test_copy_parquet(
 
 
 def test_copy_multiple_parquet_files(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: redshift_connector.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -78,7 +73,7 @@ def test_copy_multiple_parquet_files(
     write_parquet_s3(f"{copy_s3_uri}part1.parquet", [{"user_id": 1, "event_date": "2024-01-01", "event_count": 5}])
     write_parquet_s3(f"{copy_s3_uri}part2.parquet", [{"user_id": 2, "event_date": "2024-01-02", "event_count": 3}])
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=copy_s3_uri,
             target_schema=schema,
@@ -99,7 +94,7 @@ def test_copy_multiple_parquet_files(
 
 
 def test_copy_csv(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: redshift_connector.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -109,7 +104,7 @@ def test_copy_csv(
     s3_path = f"{copy_s3_uri}data.csv"
     write_csv_s3(s3_path, CSV_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=s3_path,
             target_schema=schema,
@@ -130,7 +125,7 @@ def test_copy_csv(
 
 
 def test_copy_json(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: redshift_connector.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -140,7 +135,7 @@ def test_copy_json(
     s3_path = f"{copy_s3_uri}data.json"
     write_jsonl_s3(s3_path, PARQUET_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=s3_path,
             target_schema=schema,
@@ -161,13 +156,14 @@ def test_copy_json(
 
 
 def test_copy_overwrites_existing_table(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: redshift_connector.Connection,
     registry: SchemaRegistry,
     schema: str,
     copy_s3_uri: str,
     redshift_env: RedshiftEnv,
 ) -> None:
+    executor = adapter.executor()
     old_path = f"{copy_s3_uri}old.parquet"
     write_parquet_s3(old_path, [{"user_id": 99, "event_date": "2024-01-01", "event_count": 0}])
 
@@ -206,14 +202,14 @@ def test_copy_overwrites_existing_table(
 
 
 def test_copy_requires_columns(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     registry: SchemaRegistry,
     schema: str,
     copy_s3_uri: str,
     redshift_env: RedshiftEnv,
 ) -> None:
     with pytest.raises(ValueError, match="Redshift adapter requires columns"):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=f"{copy_s3_uri}data.parquet",
                 target_schema=schema,

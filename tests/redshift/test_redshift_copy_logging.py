@@ -14,7 +14,7 @@ from event_matchers import (
 )
 from test.test_files import write_parquet_s3
 
-from sqlmat import Copy, Executor, normalize_path
+from sqlmat import Copy, normalize_path
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import SchemaRegistry
@@ -33,22 +33,17 @@ def adapter(conn: redshift_connector.Connection, events: list[Event]) -> Redshif
 
 
 @pytest.fixture
-def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-@pytest.fixture
 def copy_s3_uri(redshift_env: RedshiftEnv, test_function_id: str) -> str:
     return normalize_path(f"{redshift_env.copy_s3_uri}/redshift_copy_{test_function_id}/")
 
 
 def test_copy_events(
-    executor: Executor, registry: SchemaRegistry, schema: str, copy_s3_uri: str, events: list[Event], redshift_env: RedshiftEnv
+    adapter: RedshiftAdapter, registry: SchemaRegistry, schema: str, copy_s3_uri: str, events: list[Event], redshift_env: RedshiftEnv
 ) -> None:
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, [{"user_id": 1, "event_date": "2024-01-01", "event_count": 5}])
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=s3_path,
             target_schema=schema,
@@ -71,13 +66,13 @@ def test_copy_events(
 
 
 def test_copy_error_events(
-    executor: Executor, registry: SchemaRegistry, schema: str, copy_s3_uri: str, events: list[Event], redshift_env: RedshiftEnv
+    adapter: RedshiftAdapter, registry: SchemaRegistry, schema: str, copy_s3_uri: str, events: list[Event], redshift_env: RedshiftEnv
 ) -> None:
     bad_path = f"{copy_s3_uri}bad_schema.parquet"
     write_parquet_s3(bad_path, [{"wrong_col": 1}])
 
     with pytest.raises(redshift_connector.error.ProgrammingError):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=bad_path,
                 target_schema=schema,

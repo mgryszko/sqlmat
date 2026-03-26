@@ -14,7 +14,7 @@ from event_matchers import (
     transaction_rolled_back,
 )
 
-from sqlmat import Copy, Executor
+from sqlmat import Copy
 from sqlmat.adapters import DuckDBAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import SchemaRegistry
@@ -30,16 +30,11 @@ def adapter(conn: duckdb.DuckDBPyConnection, events: list[Event]) -> DuckDBAdapt
     return DuckDBAdapter(conn, event_handler=events.append)
 
 
-@pytest.fixture
-def executor(adapter: DuckDBAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_copy_events(adapter: DuckDBAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
     path = str(tmp_path / "data.parquet")
     pl.DataFrame([{"user_id": 1, "event_count": 5}]).write_parquet(path)
 
-    executor.run(Copy(source=path, target_schema=schema, target_table="imported", format="parquet"))
+    adapter.executor().run(Copy(source=path, target_schema=schema, target_table="imported", format="parquet"))
 
     assert events == [
         copy_started(path, schema, "imported", "parquet"),
@@ -51,11 +46,13 @@ def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, 
     ]
 
 
-def test_copy_error_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_copy_error_events(
+    adapter: DuckDBAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]
+) -> None:
     missing_path = str(tmp_path / "nonexistent.parquet")
 
     with pytest.raises(duckdb.IOException):
-        executor.run(Copy(source=missing_path, target_schema=schema, target_table="imported", format="parquet"))
+        adapter.executor().run(Copy(source=missing_path, target_schema=schema, target_table="imported", format="parquet"))
 
     assert events == [
         copy_started(missing_path, schema, "imported", "parquet"),

@@ -16,7 +16,7 @@ from event_matchers import (
     transaction_rolled_back,
 )
 
-from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
+from sqlmat import FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import Table
@@ -32,13 +32,8 @@ def adapter(conn: redshift_connector.Connection, events: list[Event]) -> Redshif
     return RedshiftAdapter(conn, event_handler=events.append)
 
 
-@pytest.fixture
-def executor(adapter: RedshiftAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-def test_full_refresh_events(executor: Executor, schema: str, events: list[Event]) -> None:
-    executor.run(FullRefreshTableTransformation(target_schema=schema, target_table="result", sql="select 1 as id"))
+def test_full_refresh_events(adapter: RedshiftAdapter, schema: str, events: list[Event]) -> None:
+    adapter.executor().run(FullRefreshTableTransformation(target_schema=schema, target_table="result", sql="select 1 as id"))
 
     assert events == [
         table_transformation_started(schema, "result"),
@@ -51,10 +46,10 @@ def test_full_refresh_events(executor: Executor, schema: str, events: list[Event
     ]
 
 
-def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
+def test_delete_insert_events(adapter: RedshiftAdapter, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=schema,
             target_table=tgt_table.name,
@@ -79,10 +74,10 @@ def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table,
     ]
 
 
-def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
+def test_merge_events(adapter: RedshiftAdapter, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=schema,
             target_table=tgt_table.name,
@@ -106,9 +101,9 @@ def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events:
     ]
 
 
-def test_rollback_events(executor: Executor, schema: str, events: list[Event]) -> None:
+def test_rollback_events(adapter: RedshiftAdapter, schema: str, events: list[Event]) -> None:
     with pytest.raises(redshift_connector.error.ProgrammingError):
-        executor.run(
+        adapter.executor().run(
             FullRefreshTableTransformation(
                 target_schema=schema,
                 target_table="result",

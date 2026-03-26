@@ -15,7 +15,7 @@ from event_matchers import (
     transaction_rolled_back,
 )
 
-from sqlmat import Copy, Executor
+from sqlmat import Copy
 from sqlmat.adapters import PostgresAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import SchemaRegistry
@@ -33,19 +33,14 @@ def adapter(conn: psycopg.Connection, events: list[Event]) -> PostgresAdapter:
     return PostgresAdapter(conn, event_handler=events.append)
 
 
-@pytest.fixture
-def executor(adapter: PostgresAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_copy_events(adapter: PostgresAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
     path = tmp_path / "data.csv"
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["user_id", "event_date", "event_count"], lineterminator="\n")
         writer.writeheader()
         writer.writerow({"user_id": 1, "event_date": "2024-01-01", "event_count": 5})
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=str(path),
             target_schema=schema,
@@ -67,11 +62,13 @@ def test_copy_events(executor: Executor, registry: SchemaRegistry, schema: str, 
     ]
 
 
-def test_copy_error_events(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]) -> None:
+def test_copy_error_events(
+    adapter: PostgresAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path, events: list[Event]
+) -> None:
     missing_path = str(tmp_path / "nonexistent.csv")
 
     with pytest.raises(FileNotFoundError):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=missing_path,
                 target_schema=schema,

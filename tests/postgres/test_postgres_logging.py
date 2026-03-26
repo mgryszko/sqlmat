@@ -17,7 +17,7 @@ from event_matchers import (
     transaction_rolled_back,
 )
 
-from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
+from sqlmat import FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import PostgresAdapter
 from sqlmat.core.events import Event
 from sqlmat.test import Table
@@ -33,13 +33,8 @@ def adapter(conn: psycopg.Connection, events: list[Event]) -> PostgresAdapter:
     return PostgresAdapter(conn, event_handler=events.append)
 
 
-@pytest.fixture
-def executor(adapter: PostgresAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
-
-
-def test_full_refresh_events(executor: Executor, schema: str, events: list[Event]) -> None:
-    executor.run(
+def test_full_refresh_events(adapter: PostgresAdapter, schema: str, events: list[Event]) -> None:
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=schema,
             target_table="result",
@@ -58,10 +53,10 @@ def test_full_refresh_events(executor: Executor, schema: str, events: list[Event
     ]
 
 
-def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
+def test_delete_insert_events(adapter: PostgresAdapter, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=schema,
             target_table=tgt_table.name,
@@ -86,10 +81,10 @@ def test_delete_insert_events(executor: Executor, schema: str, tgt_table: Table,
     ]
 
 
-def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events: list[Event]) -> None:
+def test_merge_events(adapter: PostgresAdapter, schema: str, tgt_table: Table, events: list[Event]) -> None:
     tgt_table.insert([(1, "2024-01-01", 10)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=schema,
             target_table=tgt_table.name,
@@ -113,9 +108,9 @@ def test_merge_events(executor: Executor, schema: str, tgt_table: Table, events:
     ]
 
 
-def test_rollback_events(executor: Executor, schema: str, events: list[Event]) -> None:
+def test_rollback_events(adapter: PostgresAdapter, schema: str, events: list[Event]) -> None:
     with pytest.raises(psycopg.errors.UndefinedTable):
-        executor.run(
+        adapter.executor().run(
             FullRefreshTableTransformation(
                 target_schema=schema,
                 target_table="result",

@@ -16,7 +16,7 @@ sqlmat is a lightweight SQL transformation library inspired by dbt, focused on s
 - **Always use `Table.assert_table_equals` for table assertions** — never use raw cursor queries (`cursor.fetchall()`, `conn.execute(...).fetchall()`) to assert on table contents. For tables created by operations like Copy, create a `Table` object (without calling `.create()`) and use it for assertions
 - Use plain functions, not test classes
 - Prefer asserting on complete objects rather than individual properties
-- Verify behavior through the public API (`Executor`, `Transformation`, `DuckDBAdapter`), not internal implementation details
+- Verify behavior through the public API (`Adapter.executor()`, `Transformation`, `DuckDBAdapter`), not internal implementation details
 - Don't use underscore-prefixed (package-private) names in tests — no `_helper()` functions or `_CONSTANT` variables
 
 ```bash
@@ -57,10 +57,11 @@ uv run ruff format
 
 **Executor** (`src/sqlmat/core/executor.py`)
 - Orchestrates the transformation execution
+- Created via `adapter.executor()`, which shares the adapter's event handler
 - Takes an instantiated `Transformation` object and optional `params` dict
 - Renders SQL templates using Jinja2
 - Executes drop-and-recreate pattern (full-refresh only)
-- Uses the Adapter pattern for database operations
+- Not part of the public API (`sqlmat.__init__`); used internally via the adapter
 
 **TemplateEngine** (`src/sqlmat/core/template.py`)
 - Wraps Jinja2 for SQL template rendering
@@ -75,7 +76,7 @@ uv run ruff format
 ### Execution flow
 
 1. User instantiates a `Transformation` subclass
-2. User calls `executor.run(transformation, params={"key": "value"})`
+2. User calls `adapter.executor().run(transformation, params={"key": "value"})`
 3. Executor extracts `target_schema`, `target_table`, `sql` from transformation
 4. TemplateEngine renders SQL with params and `{{ this }}` variable
 5. Adapter drops existing table (if exists)

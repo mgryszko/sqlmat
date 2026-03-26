@@ -3,7 +3,7 @@ import datetime
 import duckdb
 import pytest
 
-from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
+from sqlmat import FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import TARGET_TABLE_ALIAS, DuckDBAdapter
 from sqlmat.test import SchemaRegistry, Table
 
@@ -13,17 +13,12 @@ def adapter(conn: duckdb.DuckDBPyConnection) -> DuckDBAdapter:
     return DuckDBAdapter(conn)
 
 
-@pytest.fixture
-def executor(adapter: DuckDBAdapter) -> Executor:
-    return Executor(adapter)
-
-
 def test_full_refresh_templated(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -49,9 +44,9 @@ def test_full_refresh_templated(
 
 
 def test_full_refresh_non_templated(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -63,8 +58,9 @@ def test_full_refresh_non_templated(
 
 
 def test_delete_insert_single_unique_key(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     transformation = IncrementalTableTransformation(
@@ -103,8 +99,9 @@ def test_delete_insert_single_unique_key(
 
 
 def test_delete_insert_composite_unique_key(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
@@ -150,12 +147,12 @@ def test_delete_insert_composite_unique_key(
 
 
 def test_delete_insert_with_incremental_predicates_single_string(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -179,12 +176,12 @@ def test_delete_insert_with_incremental_predicates_single_string(
 
 
 def test_delete_insert_with_incremental_predicates_list(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -208,12 +205,12 @@ def test_delete_insert_with_incremental_predicates_list(
 
 
 def test_delete_insert_target_table_does_not_exist(
-    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     conn.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -235,11 +232,11 @@ def test_delete_insert_target_table_does_not_exist(
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_delete_insert_without_unique_key_raises_error(executor: Executor, schema: str, src_table: Table) -> None:
+def test_delete_insert_without_unique_key_raises_error(adapter: DuckDBAdapter, schema: str, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     with pytest.raises(ValueError, match="unique_key is required for delete_insert materialization"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=schema,
                 target_table="bad_incremental",
@@ -251,8 +248,9 @@ def test_delete_insert_without_unique_key_raises_error(executor: Executor, schem
 
 
 def test_merge_single_unique_key(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     transformation = IncrementalTableTransformation(
@@ -291,8 +289,9 @@ def test_merge_single_unique_key(
 
 
 def test_merge_composite_unique_key(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
@@ -338,12 +337,12 @@ def test_merge_composite_unique_key(
 
 
 def test_merge_with_incremental_predicates_single_string(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-02", 30)])
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 16), (3, "2024-01-01", 5)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -367,12 +366,12 @@ def test_merge_with_incremental_predicates_single_string(
 
 
 def test_merge_with_incremental_predicates_list(
-    conn: duckdb.DuckDBPyConnection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26)])
     tgt_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 15), (2, "2024-01-01", 8), (2, "2024-01-02", 15)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -396,11 +395,11 @@ def test_merge_with_incremental_predicates_list(
 
 
 def test_merge_target_table_does_not_exist(
-    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -422,11 +421,11 @@ def test_merge_target_table_does_not_exist(
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_merge_without_unique_key_raises_error(executor: Executor, src_table: Table) -> None:
+def test_merge_without_unique_key_raises_error(adapter: DuckDBAdapter, src_table: Table) -> None:
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
     with pytest.raises(ValueError, match="unique_key is required for merge materialization"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=src_table.schema,
                 target_table="bad_merge",
@@ -438,12 +437,12 @@ def test_merge_without_unique_key_raises_error(executor: Executor, src_table: Ta
 
 
 def test_full_refresh_rollback_on_error(
-    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(
+        adapter.executor().run(
             FullRefreshTableTransformation(
                 target_schema=tgt_table.schema,
                 target_table=tgt_table.name,
@@ -456,12 +455,12 @@ def test_full_refresh_rollback_on_error(
 
 
 def test_delete_insert_rollback_on_error(
-    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=tgt_table.schema,
                 target_table=tgt_table.name,
@@ -477,12 +476,12 @@ def test_delete_insert_rollback_on_error(
 
 
 def test_merge_rollback_on_error(
-    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=tgt_table.schema,
                 target_table=tgt_table.name,

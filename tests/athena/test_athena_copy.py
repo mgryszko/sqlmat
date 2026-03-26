@@ -3,7 +3,8 @@ import pytest
 from env import AthenaEnv
 from test.test_files import write_csv_s3, write_jsonl_s3, write_parquet_s3
 
-from sqlmat import Copy, Executor, normalize_path
+from sqlmat import Copy, normalize_path
+from sqlmat.adapters import AthenaAdapter
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
@@ -27,7 +28,7 @@ CSV_ROWS = [
 
 
 def test_copy_parquet(
-    executor: Executor,
+    adapter: AthenaAdapter,
     conn: pyathena.connection.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -37,7 +38,7 @@ def test_copy_parquet(
     s3_path = f"{copy_s3_uri}data.parquet"
     write_parquet_s3(s3_path, PARQUET_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=copy_s3_uri,
             target_schema=schema,
@@ -57,7 +58,7 @@ def test_copy_parquet(
 
 
 def test_copy_csv(
-    executor: Executor,
+    adapter: AthenaAdapter,
     conn: pyathena.connection.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -67,7 +68,7 @@ def test_copy_csv(
     s3_path = f"{copy_s3_uri}data.csv"
     write_csv_s3(s3_path, CSV_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=copy_s3_uri,
             target_schema=schema,
@@ -88,7 +89,7 @@ def test_copy_csv(
 
 
 def test_copy_json(
-    executor: Executor,
+    adapter: AthenaAdapter,
     conn: pyathena.connection.Connection,
     registry: SchemaRegistry,
     schema: str,
@@ -98,7 +99,7 @@ def test_copy_json(
     s3_path = f"{copy_s3_uri}data.json"
     write_jsonl_s3(s3_path, PARQUET_ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=copy_s3_uri,
             target_schema=schema,
@@ -118,13 +119,14 @@ def test_copy_json(
 
 
 def test_copy_overwrites_existing_table(
-    executor: Executor,
+    adapter: AthenaAdapter,
     conn: pyathena.connection.Connection,
     registry: SchemaRegistry,
     schema: str,
     s3_table_base_uri: str,
     copy_s3_uri: str,
 ) -> None:
+    executor = adapter.executor()
     old_uri = f"{copy_s3_uri}old/"
     write_parquet_s3(f"{old_uri}data.parquet", [{"user_id": 99, "event_date": "2024-01-01", "event_count": 0}])
 
@@ -161,13 +163,13 @@ def test_copy_overwrites_existing_table(
 
 
 def test_copy_requires_columns(
-    executor: Executor,
+    adapter: AthenaAdapter,
     registry: SchemaRegistry,
     schema: str,
     copy_s3_uri: str,
 ) -> None:
     with pytest.raises(ValueError, match="Athena adapter requires columns"):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=f"{copy_s3_uri}data.parquet",
                 target_schema=schema,

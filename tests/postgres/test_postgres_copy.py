@@ -4,7 +4,7 @@ import pathlib
 import psycopg
 import pytest
 
-from sqlmat import Copy, Executor
+from sqlmat import Copy
 from sqlmat.adapters import PostgresAdapter
 from sqlmat.test import PostgresTable, SchemaRegistry
 
@@ -12,11 +12,6 @@ from sqlmat.test import PostgresTable, SchemaRegistry
 @pytest.fixture
 def adapter(conn: psycopg.Connection) -> PostgresAdapter:
     return PostgresAdapter(conn)
-
-
-@pytest.fixture
-def executor(adapter: PostgresAdapter) -> Executor:
-    return Executor(adapter)
 
 
 ROWS = [
@@ -27,14 +22,16 @@ ROWS = [
 COLUMNS = [("user_id", "bigint"), ("event_date", "varchar"), ("event_count", "bigint")]
 
 
-def test_copy_csv(executor: Executor, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
+def test_copy_csv(
+    adapter: PostgresAdapter, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
+) -> None:
     path = tmp_path / "data.csv"
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["user_id", "event_date", "event_count"], lineterminator="\n")
         writer.writeheader()
         writer.writerows(ROWS)
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=str(path),
             target_schema=schema,
@@ -55,14 +52,14 @@ def test_copy_csv(executor: Executor, conn: psycopg.Connection, registry: Schema
 
 
 def test_copy_csv_with_options(
-    executor: Executor, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
+    adapter: PostgresAdapter, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
 ) -> None:
     path = tmp_path / "data.csv"
     with open(path, "w") as f:
         f.write("1|2024-01-01|5\n")
         f.write("2|2024-01-02|3\n")
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=str(path),
             target_schema=schema,
@@ -83,8 +80,9 @@ def test_copy_csv_with_options(
 
 
 def test_copy_overwrites_existing_table(
-    executor: Executor, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
+    adapter: PostgresAdapter, conn: psycopg.Connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
 ) -> None:
+    executor = adapter.executor()
     old_path = tmp_path / "old.csv"
     with open(old_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["user_id", "event_date", "event_count"], lineterminator="\n")
@@ -128,9 +126,9 @@ def test_copy_overwrites_existing_table(
     )
 
 
-def test_copy_error_on_missing_file(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
+def test_copy_error_on_missing_file(adapter: PostgresAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
     with pytest.raises(FileNotFoundError):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=str(tmp_path / "nonexistent.csv"),
                 target_schema=schema,
@@ -141,12 +139,12 @@ def test_copy_error_on_missing_file(executor: Executor, registry: SchemaRegistry
         )
 
 
-def test_copy_requires_columns(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
+def test_copy_requires_columns(adapter: PostgresAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
     path = tmp_path / "data.csv"
     path.write_text("user_id,event_date,event_count\n1,2024-01-01,5\n")
 
     with pytest.raises(ValueError, match="requires columns"):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=str(path),
                 target_schema=schema,
@@ -156,12 +154,12 @@ def test_copy_requires_columns(executor: Executor, registry: SchemaRegistry, sch
         )
 
 
-def test_copy_rejects_non_csv_format(executor: Executor, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
+def test_copy_rejects_non_csv_format(adapter: PostgresAdapter, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path) -> None:
     path = tmp_path / "data.parquet"
     path.write_bytes(b"fake")
 
     with pytest.raises(ValueError, match="only supports CSV"):
-        executor.run(
+        adapter.executor().run(
             Copy(
                 source=str(path),
                 target_schema=schema,

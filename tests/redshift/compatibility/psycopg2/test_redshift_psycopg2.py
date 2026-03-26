@@ -6,7 +6,7 @@ import pytest
 from env import RedshiftEnv
 from test.test_files import write_parquet_s3
 
-from sqlmat import Copy, Executor, FullRefreshTableTransformation, IncrementalTableTransformation, Unload
+from sqlmat import Copy, FullRefreshTableTransformation, IncrementalTableTransformation, Unload
 from sqlmat.adapters import RedshiftAdapter
 from sqlmat.test import Files, RedshiftTable, SchemaRegistry, Table
 
@@ -16,11 +16,6 @@ def adapter(conn: psycopg2.extensions.connection) -> RedshiftAdapter:
     return RedshiftAdapter(conn)
 
 
-@pytest.fixture
-def executor(adapter: RedshiftAdapter) -> Executor:
-    return Executor(adapter)
-
-
 PARQUET_ROWS = [
     {"user_id": 1, "event_date": "2024-01-01", "event_count": 5},
     {"user_id": 2, "event_date": "2024-01-02", "event_count": 3},
@@ -28,11 +23,11 @@ PARQUET_ROWS = [
 
 
 def test_full_refresh(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -58,12 +53,12 @@ def test_full_refresh(
 
 
 def test_delete_insert_single_unique_key(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -85,12 +80,12 @@ def test_delete_insert_single_unique_key(
 
 
 def test_delete_insert_composite_unique_key(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -115,12 +110,12 @@ def test_delete_insert_composite_unique_key(
 
 
 def test_delete_insert_target_table_does_not_exist(
-    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     conn.cursor().execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -143,12 +138,12 @@ def test_delete_insert_target_table_does_not_exist(
 
 
 def test_merge(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -170,12 +165,12 @@ def test_merge(
 
 
 def test_full_refresh_rollback_on_error(
-    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: RedshiftAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     with pytest.raises(psycopg2.ProgrammingError):
-        executor.run(
+        adapter.executor().run(
             FullRefreshTableTransformation(
                 target_schema=tgt_table.schema,
                 target_table=tgt_table.name,
@@ -188,7 +183,7 @@ def test_full_refresh_rollback_on_error(
 
 
 def test_copy_parquet(
-    executor: Executor,
+    adapter: RedshiftAdapter,
     conn: psycopg2.extensions.connection,
     registry: SchemaRegistry,
     schema: str,
@@ -200,7 +195,7 @@ def test_copy_parquet(
 
     copy_columns = [("user_id", "bigint"), ("event_date", "varchar(10)"), ("event_count", "bigint")]
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=s3_path,
             target_schema=schema,
@@ -221,11 +216,11 @@ def test_copy_parquet(
 
 
 def test_unload_parquet(
-    executor: Executor, registry: SchemaRegistry, src_table: Table, unload_s3_uri: str, redshift_env: RedshiftEnv
+    adapter: RedshiftAdapter, registry: SchemaRegistry, src_table: Table, unload_s3_uri: str, redshift_env: RedshiftEnv
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=unload_s3_uri,

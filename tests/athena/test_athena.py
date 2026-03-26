@@ -3,7 +3,7 @@ from datetime import date
 import pyathena
 import pytest
 
-from sqlmat import Executor, FullRefreshTableTransformation, IncrementalTableTransformation
+from sqlmat import FullRefreshTableTransformation, IncrementalTableTransformation
 from sqlmat.adapters import TARGET_TABLE_ALIAS, AthenaAdapter
 from sqlmat.test import SchemaRegistry, Table
 
@@ -13,17 +13,12 @@ def adapter(conn: pyathena.connection.Connection, s3_table_base_uri: str) -> Ath
     return AthenaAdapter(conn, s3_table_base_uri=s3_table_base_uri)
 
 
-@pytest.fixture
-def executor(adapter: AthenaAdapter) -> Executor:
-    return Executor(adapter)
-
-
 def test_full_refresh_templated(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, date(2024, 1, 1), 5), (1, date(2024, 1, 2), 3), (2, date(2024, 1, 1), 7)])
 
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -46,9 +41,9 @@ def test_full_refresh_templated(
 
 
 def test_full_refresh_non_templated(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -60,8 +55,9 @@ def test_full_refresh_non_templated(
 
 
 def test_delete_insert_single_unique_key(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20)])
 
     transformation = IncrementalTableTransformation(
@@ -100,8 +96,9 @@ def test_delete_insert_single_unique_key(
 
 
 def test_delete_insert_composite_unique_key(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20), (1, date(2024, 1, 2), 15), (2, date(2024, 1, 2), 25)])
     src_table.insert([(1, date(2024, 1, 2), 16), (2, date(2024, 1, 2), 26), (1, date(2024, 1, 3), 30), (2, date(2024, 1, 3), 35)])
 
@@ -147,12 +144,12 @@ def test_delete_insert_composite_unique_key(
 
 
 def test_delete_insert_with_incremental_predicates_single_string(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(2, date(2024, 1, 2), 25), (3, date(2024, 1, 2), 30)])
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 16), (3, date(2024, 1, 1), 5)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -176,12 +173,12 @@ def test_delete_insert_with_incremental_predicates_single_string(
 
 
 def test_delete_insert_with_incremental_predicates_list(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, date(2024, 1, 2), 16), (2, date(2024, 1, 2), 26)])
     tgt_table.insert([(1, date(2024, 1, 1), 5), (1, date(2024, 1, 2), 15), (2, date(2024, 1, 1), 8), (2, date(2024, 1, 2), 15)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -205,13 +202,13 @@ def test_delete_insert_with_incremental_predicates_list(
 
 
 def test_delete_insert_target_table_does_not_exist(
-    conn: pyathena.connection.Connection, adapter: AthenaAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     cursor = conn.cursor()
     cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -233,11 +230,11 @@ def test_delete_insert_target_table_does_not_exist(
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_delete_insert_without_unique_key_raises_error(executor: Executor, schema: str, src_table: Table) -> None:
+def test_delete_insert_without_unique_key_raises_error(adapter: AthenaAdapter, schema: str, src_table: Table) -> None:
     src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
 
     with pytest.raises(ValueError, match="unique_key is required for delete_insert materialization"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=schema,
                 target_table="bad_incremental",
@@ -249,8 +246,9 @@ def test_delete_insert_without_unique_key_raises_error(executor: Executor, schem
 
 
 def test_merge_single_unique_key(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20)])
 
     transformation = IncrementalTableTransformation(
@@ -289,8 +287,9 @@ def test_merge_single_unique_key(
 
 
 def test_merge_composite_unique_key(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
+    executor = adapter.executor()
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20), (1, date(2024, 1, 2), 15), (2, date(2024, 1, 2), 25)])
     src_table.insert([(1, date(2024, 1, 2), 16), (2, date(2024, 1, 2), 26), (1, date(2024, 1, 3), 30), (2, date(2024, 1, 3), 35)])
 
@@ -336,12 +335,12 @@ def test_merge_composite_unique_key(
 
 
 def test_merge_with_incremental_predicates_single_string(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(2, date(2024, 1, 2), 25), (3, date(2024, 1, 2), 30)])
     tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 16), (3, date(2024, 1, 1), 5)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -365,12 +364,12 @@ def test_merge_with_incremental_predicates_single_string(
 
 
 def test_merge_with_incremental_predicates_list(
-    conn: pyathena.connection.Connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, date(2024, 1, 2), 16), (2, date(2024, 1, 2), 26)])
     tgt_table.insert([(1, date(2024, 1, 1), 5), (1, date(2024, 1, 2), 15), (2, date(2024, 1, 1), 8), (2, date(2024, 1, 2), 15)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -394,11 +393,11 @@ def test_merge_with_incremental_predicates_list(
 
 
 def test_merge_target_table_does_not_exist(
-    conn: pyathena.connection.Connection, adapter: AthenaAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -420,11 +419,11 @@ def test_merge_target_table_does_not_exist(
     assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
 
 
-def test_merge_without_unique_key_raises_error(executor: Executor, src_table: Table) -> None:
+def test_merge_without_unique_key_raises_error(adapter: AthenaAdapter, src_table: Table) -> None:
     src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
 
     with pytest.raises(ValueError, match="unique_key is required for merge materialization"):
-        executor.run(
+        adapter.executor().run(
             IncrementalTableTransformation(
                 target_schema=src_table.schema,
                 target_table="bad_merge",

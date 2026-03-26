@@ -2,7 +2,8 @@ import pyathena
 import pytest
 from env import AthenaEnv
 
-from sqlmat import Executor, Unload, normalize_path
+from sqlmat import Unload, normalize_path
+from sqlmat.adapters import AthenaAdapter
 from sqlmat.test import AthenaTable, Files, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
@@ -20,10 +21,10 @@ def src_table(conn: pyathena.connection.Connection, registry: SchemaRegistry, sc
     return AthenaTable(conn, schema, "events", COLUMNS, s3_table_base_uri).create(registry)
 
 
-def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
+def test_unload_parquet(adapter: AthenaAdapter, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=unload_s3_uri,
@@ -35,10 +36,10 @@ def test_unload_parquet(executor: Executor, registry: SchemaRegistry, src_table:
     Files(f"{unload_s3_uri}*").approve_parquet(sort_columns=["user_id"])
 
 
-def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
+def test_unload_json(adapter: AthenaAdapter, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=unload_s3_uri,
@@ -50,10 +51,10 @@ def test_unload_json(executor: Executor, registry: SchemaRegistry, src_table: At
     Files(f"{unload_s3_uri}*").approve_jsonl(sort_columns=["user_id"])
 
 
-def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
+def test_unload_csv(adapter: AthenaAdapter, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=unload_s3_uri,
@@ -66,10 +67,10 @@ def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Ath
     Files(f"{unload_s3_uri}*").approve_csv(fieldnames=["user_id", "event_date", "event_count"], sort_columns=["user_id"])
 
 
-def test_unload_with_options(executor: Executor, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
+def test_unload_with_options(adapter: AthenaAdapter, registry: SchemaRegistry, src_table: AthenaTable, unload_s3_uri: str) -> None:
     src_table.insert([(1, "2024-01-01", 5)])
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=unload_s3_uri,

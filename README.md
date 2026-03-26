@@ -32,7 +32,7 @@ sqlmat works with standard DB-API 2.0 connections. Install the driver for your d
 Drops and recreates the target table on every run.
 
 ```python
-from sqlmat import Executor, FullRefreshTableTransformation
+from sqlmat import FullRefreshTableTransformation
 from sqlmat.adapters import DuckDBAdapter
 
 transformation = FullRefreshTableTransformation(
@@ -41,8 +41,8 @@ transformation = FullRefreshTableTransformation(
     sql="select id, name from raw.users where active = {{ is_active }}",
 )
 
-executor = Executor(DuckDBAdapter(conn))
-executor.run(transformation, template_context={"is_active": "true"})
+adapter = DuckDBAdapter(conn)
+adapter.executor().run(transformation, template_context={"is_active": "true"})
 ```
 
 Implicit template parameter:
@@ -87,7 +87,7 @@ unload = Unload(
     options=["ALLOWOVERWRITE"],  # optional, adapter-specific
 )
 
-executor.run(unload)
+adapter.executor().run(unload)
 ```
 
 The `sql` field supports Jinja2 templates with parameters passed via `template_context`. No implicit template parameters.
@@ -224,7 +224,7 @@ adapter = AthenaAdapter(conn, s3_table_base_uri="s3://bucket/tables/")
 
 ## Logging
 
-sqlmat uses an event-based logging system. The `Executor` and each `Adapter` accept an `event_handler` callback (`Callable[[Event], None]`) that receives structured event objects for every operation.
+sqlmat uses an event-based logging system. Each `Adapter` accepts an `event_handler` callback (`Callable[[Event], None]`) that receives structured event objects for every operation. The executor created via `adapter.executor()` shares the same event handler.
 
 Events include: `TransformationStarted`, `TransformationCompleted`, `TransformationFailed`, `SqlRendered`, `UnloadStarted`, `UnloadCompleted`, `UnloadFailed`, `CopyStarted`, `CopyCompleted`, `CopyFailed`, `TableCreated`, `TableDropped`, `SqlExecuted`, `DataLoaded`, `DataUnloaded`, `RowsDeleted`, `RowsInserted`, `RowsMerged`, `TransactionBegun`, `TransactionCommitted`, `TransactionRolledBack`, `TableExistenceChecked`.
 
@@ -233,12 +233,12 @@ Events include: `TransformationStarted`, `TransformationCompleted`, `Transformat
 A built-in event handler that routes events to Python's `logging` module:
 
 ```python
-from sqlmat import Executor, PythonLoggingSink
+from sqlmat import PythonLoggingSink
 from sqlmat.adapters import DuckDBAdapter
 
 sink = PythonLoggingSink()  # uses logging.getLogger("sqlmat") by default
 adapter = DuckDBAdapter(conn, event_handler=sink)
-executor = Executor(adapter, event_handler=sink)
+adapter.executor().run(transformation)
 ```
 
 High-level events (`TransformationStarted/Completed/Failed`, `CopyStarted/Completed/Failed`, `UnloadStarted/Completed/Failed`) are logged at `INFO`/`ERROR` level. Low-level SQL events are logged at `DEBUG`.
@@ -256,7 +256,8 @@ def my_handler(event):
         case TransformationCompleted():
             print(event_message(event))
 
-executor = Executor(adapter, event_handler=my_handler)
+adapter = DuckDBAdapter(conn, event_handler=my_handler)
+adapter.executor().run(transformation)
 ```
 
 ## Test framework

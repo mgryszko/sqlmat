@@ -6,7 +6,7 @@ import psycopg2
 import psycopg2.errors
 import pytest
 
-from sqlmat import Copy, Executor, FullRefreshTableTransformation, IncrementalTableTransformation, Unload
+from sqlmat import Copy, FullRefreshTableTransformation, IncrementalTableTransformation, Unload
 from sqlmat.adapters import PostgresAdapter
 from sqlmat.test import Files, PostgresTable, SchemaRegistry, Table
 
@@ -16,17 +16,12 @@ def adapter(conn: psycopg2.extensions.connection) -> PostgresAdapter:
     return PostgresAdapter(conn)
 
 
-@pytest.fixture
-def executor(adapter: PostgresAdapter) -> Executor:
-    return Executor(adapter)
-
-
 def test_full_refresh(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     src_table.insert([(1, "2024-01-01", 5), (1, "2024-01-02", 3), (2, "2024-01-01", 7)])
 
-    executor.run(
+    adapter.executor().run(
         FullRefreshTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -52,12 +47,12 @@ def test_full_refresh(
 
 
 def test_delete_insert_single_unique_key(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -79,12 +74,12 @@ def test_delete_insert_single_unique_key(
 
 
 def test_delete_insert_composite_unique_key(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20), (1, "2024-01-02", 15), (2, "2024-01-02", 25)])
     src_table.insert([(1, "2024-01-02", 16), (2, "2024-01-02", 26), (1, "2024-01-03", 30), (2, "2024-01-03", 35)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -109,12 +104,12 @@ def test_delete_insert_composite_unique_key(
 
 
 def test_delete_insert_target_table_does_not_exist(
-    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, executor: Executor, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, src_table: Table, tgt_table: Table
 ) -> None:
     conn.cursor().execute(f"drop table if exists {tgt_table.qualified_name}")
     src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
 
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -137,12 +132,12 @@ def test_delete_insert_target_table_does_not_exist(
 
 
 def test_merge(
-    conn: psycopg2.extensions.connection, executor: Executor, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
 
     src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
-    executor.run(
+    adapter.executor().run(
         IncrementalTableTransformation(
             target_schema=tgt_table.schema,
             target_table=tgt_table.name,
@@ -164,12 +159,12 @@ def test_merge(
 
 
 def test_full_refresh_rollback_on_error(
-    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, executor: Executor, registry: SchemaRegistry, tgt_table: Table
+    conn: psycopg2.extensions.connection, adapter: PostgresAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
     tgt_table.insert([(1, "2024-01-01", 100)])
 
     with pytest.raises(psycopg2.errors.UndefinedTable):
-        executor.run(
+        adapter.executor().run(
             FullRefreshTableTransformation(
                 target_schema=tgt_table.schema,
                 target_table=tgt_table.name,
@@ -182,7 +177,7 @@ def test_full_refresh_rollback_on_error(
 
 
 def test_copy_csv(
-    executor: Executor, conn: psycopg2.extensions.connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
+    adapter: PostgresAdapter, conn: psycopg2.extensions.connection, registry: SchemaRegistry, schema: str, tmp_path: pathlib.Path
 ) -> None:
     path = tmp_path / "data.csv"
     with open(path, "w", newline="") as f:
@@ -197,7 +192,7 @@ def test_copy_csv(
 
     copy_columns = [("user_id", "bigint"), ("event_date", "varchar"), ("event_count", "bigint")]
 
-    executor.run(
+    adapter.executor().run(
         Copy(
             source=str(path),
             target_schema=schema,
@@ -217,12 +212,12 @@ def test_copy_csv(
     )
 
 
-def test_unload_csv(executor: Executor, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
+def test_unload_csv(adapter: PostgresAdapter, registry: SchemaRegistry, src_table: Table, tmp_path: pathlib.Path) -> None:
     src_table.insert([(1, "2024-01-01", 5), (2, "2024-01-02", 3)])
 
     output_path = str(tmp_path / "output.csv")
 
-    executor.run(
+    adapter.executor().run(
         Unload(
             sql="select user_id, event_date, event_count from {{ source_table }}",
             destination=output_path,

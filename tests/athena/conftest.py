@@ -7,7 +7,6 @@ from env import AthenaEnv
 from sqlmat import normalize_path
 from sqlmat.adapters import AthenaAdapter
 from sqlmat.core.events import Event
-from sqlmat.core.executor import Executor
 from sqlmat.test import AthenaTable, SchemaRegistry
 from sqlmat.test.table import ColumnSpec
 
@@ -36,11 +35,6 @@ def events() -> list[Event]:
 @pytest.fixture
 def adapter(conn: pyathena.connection.Connection, s3_table_base_uri: str, events: list[Event]) -> AthenaAdapter:
     return AthenaAdapter(conn, s3_table_base_uri=s3_table_base_uri, event_handler=events.append)
-
-
-@pytest.fixture
-def executor(adapter: AthenaAdapter, events: list[Event]) -> Executor:
-    return Executor(adapter, event_handler=events.append)
 
 
 @pytest.fixture
