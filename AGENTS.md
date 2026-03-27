@@ -64,6 +64,7 @@ uv run ruff format
 - Not part of the public API (`sqlmat.__init__`); used internally via the adapter
 
 **TemplateEngine** (`src/sqlmat/core/template.py`)
+- Part of the public API (`sqlmat.__init__`); can be used standalone for SQL template rendering
 - Wraps Jinja2 for SQL template rendering
 - Provides `{{ this }}` variable automatically (references target table)
 - Merges user params with built-in variables

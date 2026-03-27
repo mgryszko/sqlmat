@@ -1,4 +1,5 @@
 from sqlmat.core.events import EventHandler, Failure, SqlEvent
+from sqlmat.core.template import TemplateEngine
 from sqlmat.core.transformation import (
     Copy,
     FullRefreshTableTransformation,
@@ -16,6 +17,7 @@ __all__ = [
     "IncrementalTableTransformation",
     "PythonLoggingSink",
     "SqlEvent",
+    "TemplateEngine",
     "Unload",
     "event_message",
     "normalize_path",

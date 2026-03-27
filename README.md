@@ -166,6 +166,20 @@ Copy(
 )
 ```
 
+## Template engine
+
+`TemplateEngine` can be used standalone to render Jinja2 SQL templates without running a transformation:
+
+```python
+from sqlmat import TemplateEngine
+
+engine = TemplateEngine()
+sql = engine.render(
+    "select * from {{ schema }}.users where active = {{ is_active }}",
+    {"schema": "raw", "is_active": "true"},
+)
+```
+
 ## Adapters
 
 All adapters implement the same `Adapter` interface and accept a DB-API 2.0 connection.
