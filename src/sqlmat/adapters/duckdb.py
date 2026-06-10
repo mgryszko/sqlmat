@@ -116,7 +116,7 @@ class DuckDBAdapter(Adapter):
         self._conn.execute(insert_sql)
 
     def merge(
-        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+        self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
         join_conditions = " and ".join([f"{SOURCE_TABLE_ALIAS}.{key} = {TARGET_TABLE_ALIAS}.{key}" for key in unique_keys])
@@ -128,7 +128,7 @@ class DuckDBAdapter(Adapter):
 
         merge_sql = f"""
             merge into {full_target} as {TARGET_TABLE_ALIAS}
-            using {temp_table} as {SOURCE_TABLE_ALIAS}
+            using ({source_sql}) as {SOURCE_TABLE_ALIAS}
             on {on_clause}
             when matched then update set *
             when not matched then insert *

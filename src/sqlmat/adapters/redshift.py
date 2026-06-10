@@ -116,10 +116,16 @@ class RedshiftAdapter(Adapter):
         self._execute(insert_sql)
 
     def merge(
-        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+        self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
+        temp_table = f"{target_table}_tmp"
+        temp_table_full = f"{target_schema}.{temp_table}"
+
+        self.drop_table(target_schema, temp_table)
+        self.create_table_as(target_schema, temp_table, source_sql)
+
         full_target = f"{target_schema}.{target_table}"
-        join_conditions = " and ".join([f"{temp_table}.{key} = {full_target}.{key}" for key in unique_keys])
+        join_conditions = " and ".join([f"{temp_table_full}.{key} = {full_target}.{key}" for key in unique_keys])
 
         on_clause = join_conditions
         if predicates:
@@ -129,19 +135,21 @@ class RedshiftAdapter(Adapter):
         columns = self.get_columns(target_schema, target_table)
         non_key_columns = [c for c in columns if c not in unique_keys]
 
-        update_set = ", ".join([f"{c} = {temp_table}.{c}" for c in non_key_columns])
+        update_set = ", ".join([f"{c} = {temp_table_full}.{c}" for c in non_key_columns])
         insert_columns = ", ".join(columns)
-        insert_values = ", ".join([f"{temp_table}.{c}" for c in columns])
+        insert_values = ", ".join([f"{temp_table_full}.{c}" for c in columns])
 
         merge_sql = f"""
             merge into {full_target}
-            using {temp_table}
+            using {temp_table_full}
             on {on_clause}
             when matched then update set {update_set}
             when not matched then insert ({insert_columns}) values ({insert_values})
         """
         self._emit(RowsMerged(schema=target_schema, table=target_table, sql=merge_sql))
         self._execute(merge_sql)
+
+        self.drop_table(target_schema, temp_table)
 
     @staticmethod
     def _resolve_predicates(predicates: list[str], full_target: str) -> list[str]:

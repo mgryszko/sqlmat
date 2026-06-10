@@ -1,4 +1,4 @@
-from sqlmat.adapters.base import TARGET_TABLE_ALIAS, Adapter
+from sqlmat.adapters.base import SOURCE_TABLE_ALIAS, TARGET_TABLE_ALIAS, Adapter
 from sqlmat.core.events import (
     DataLoaded,
     DataUnloaded,
@@ -125,10 +125,10 @@ class AthenaAdapter(Adapter):
         self._execute(insert_sql)
 
     def merge(
-        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+        self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         full_target = f"{target_schema}.{target_table}"
-        join_conditions = " and ".join([f"{temp_table}.{key} = {full_target}.{key}" for key in unique_keys])
+        join_conditions = " and ".join([f"{SOURCE_TABLE_ALIAS}.{key} = {full_target}.{key}" for key in unique_keys])
 
         on_clause = join_conditions
         if predicates:
@@ -138,13 +138,13 @@ class AthenaAdapter(Adapter):
         columns = self.get_columns(target_schema, target_table)
         non_key_columns = [c for c in columns if c not in unique_keys]
 
-        update_set = ", ".join([f"{c} = {temp_table}.{c}" for c in non_key_columns])
+        update_set = ", ".join([f"{c} = {SOURCE_TABLE_ALIAS}.{c}" for c in non_key_columns])
         insert_columns = ", ".join(columns)
-        insert_values = ", ".join([f"{temp_table}.{c}" for c in columns])
+        insert_values = ", ".join([f"{SOURCE_TABLE_ALIAS}.{c}" for c in columns])
 
         merge_sql = f"""
             merge into {full_target}
-            using {temp_table}
+            using ({source_sql}) as {SOURCE_TABLE_ALIAS}
             on {on_clause}
             when matched then update set {update_set}
             when not matched then insert ({insert_columns}) values ({insert_values})

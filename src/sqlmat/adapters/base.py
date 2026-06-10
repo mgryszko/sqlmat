@@ -68,7 +68,7 @@ class Adapter(ABC):
 
     @abstractmethod
     def merge(
-        self, target_schema: str, target_table: str, temp_table: str, unique_keys: list[str], predicates: list[str] | None = None
+        self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
         pass
 

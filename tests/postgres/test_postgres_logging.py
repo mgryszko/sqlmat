@@ -98,11 +98,8 @@ def test_merge_events(adapter: PostgresAdapter, schema: str, tgt_table: Table, e
         table_transformation_started(schema, tgt_table.name),
         sql_rendered(schema, tgt_table.name),
         transaction_begun(),
-        table_dropped(schema, f"{tgt_table.name}_tmp"),
-        table_created(schema, f"{tgt_table.name}_tmp"),
         table_existence_checked(schema, tgt_table.name),
         rows_merged(schema, tgt_table.name),
-        table_dropped(schema, f"{tgt_table.name}_tmp"),
         transaction_committed(),
         table_transformation_completed(schema, tgt_table.name),
     ]

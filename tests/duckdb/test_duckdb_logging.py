@@ -91,13 +91,32 @@ def test_merge_events(adapter: DuckDBAdapter, schema: str, tgt_table: Table, eve
         table_transformation_started(schema, tgt_table.name),
         sql_rendered(schema, tgt_table.name),
         transaction_begun(),
-        table_dropped(schema, f"{tgt_table.name}_tmp"),
-        table_created(schema, f"{tgt_table.name}_tmp"),
         table_existence_checked(schema, tgt_table.name),
         rows_merged(schema, tgt_table.name),
-        table_dropped(schema, f"{tgt_table.name}_tmp"),
         transaction_committed(),
         table_transformation_completed(schema, tgt_table.name),
+    ]
+
+
+def test_merge_target_table_does_not_exist_events(adapter: DuckDBAdapter, schema: str, events: list[Event]) -> None:
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=schema,
+            target_table="daily_stats",
+            strategy="merge",
+            unique_key="user_id",
+            sql="select 1 as user_id, '2024-01-01'::date as event_date, 10 as event_count",
+        )
+    )
+
+    assert events == [
+        table_transformation_started(schema, "daily_stats"),
+        sql_rendered(schema, "daily_stats"),
+        transaction_begun(),
+        table_existence_checked(schema, "daily_stats"),
+        table_created(schema, "daily_stats"),
+        transaction_committed(),
+        table_transformation_completed(schema, "daily_stats"),
     ]
 
 

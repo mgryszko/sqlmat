@@ -157,25 +157,17 @@ class Executor:
         if unique_key is None:
             raise ValueError("unique_key is required for merge materialization")
 
-        temp_table = f"{target_table}_tmp"
-        temp_table_full = f"{target_schema}.{temp_table}"
-
         self._adapter.begin_transaction()
         try:
-            self._adapter.drop_table(target_schema, temp_table)
-            self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
-
             if not self._adapter.table_exists(target_schema, target_table):
-                self._adapter.rename_table(target_schema, temp_table, target_table)
+                self._adapter.create_table_as(target_schema, target_table, rendered_sql)
                 self._adapter.commit()
                 return
 
             predicates = self._normalize_predicates(incremental_predicates)
             unique_keys = [unique_key] if isinstance(unique_key, str) else unique_key
 
-            self._adapter.merge(target_schema, target_table, temp_table_full, unique_keys, predicates)
-
-            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.merge(target_schema, target_table, rendered_sql, unique_keys, predicates)
             self._adapter.commit()
         except Exception:
             self._adapter.rollback()
