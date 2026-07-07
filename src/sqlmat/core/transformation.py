@@ -18,7 +18,7 @@ class IncrementalTableTransformation:
     target_schema: str
     target_table: str
     sql: str
-    strategy: Literal["delete_insert", "merge"]
+    strategy: Literal["delete_insert", "merge", "append"]
     unique_key: str | list[str] | None = None
     incremental_predicates: str | list[str] | None = None
 

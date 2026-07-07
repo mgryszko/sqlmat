@@ -1,6 +1,7 @@
 from datetime import date
 
 import pyathena
+import pyathena.error
 import pytest
 
 from sqlmat import FullRefreshTableTransformation, IncrementalTableTransformation
@@ -432,3 +433,160 @@ def test_merge_without_unique_key_raises_error(adapter: AthenaAdapter, src_table
             ),
             template_context={"source_table": src_table.qualified_name},
         )
+
+
+def test_append_target_table_does_not_exist(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, src_table: Table, tgt_table: Table
+) -> None:
+    cursor = conn.cursor()
+    cursor.execute(f"drop table if exists {tgt_table.qualified_name}")
+    src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            strategy="append",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_append_to_existing_table(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20)])
+    src_table.insert([(2, date(2024, 1, 2), 25), (3, date(2024, 1, 3), 30)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            strategy="append",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_append_runs_twice_accumulates(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    executor = adapter.executor()
+    src_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 2), 20)])
+
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        sql="select user_id, event_date, event_count from {{ source_table }}",
+        strategy="append",
+    )
+
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 20},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_append_without_unique_key_succeeds(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, date(2024, 1, 1), 10)])
+    src_table.insert([(2, date(2024, 1, 2), 20)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            strategy="append",
+            unique_key=None,
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+
+def test_append_ignores_unique_key_and_predicates(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, date(2024, 1, 1), 10), (2, date(2024, 1, 1), 20)])
+    src_table.insert([(2, date(2024, 1, 2), 25), (3, date(2024, 1, 3), 30)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+            strategy="append",
+            unique_key="user_id",
+            incremental_predicates=f"{TARGET_TABLE_ALIAS}.event_count > 15",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_append_rollback_on_error(
+    conn: pyathena.connection.Connection, adapter: AthenaAdapter, registry: SchemaRegistry, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, date(2024, 1, 1), 100)])
+
+    with pytest.raises(pyathena.error.DatabaseError):
+        adapter.executor().run(
+            IncrementalTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                sql="select * from nonexistent_table",
+                strategy="append",
+            )
+        )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")

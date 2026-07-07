@@ -52,7 +52,7 @@ Any additional parameters can be passed via the `template_context` dict.
 
 ### IncrementalTableTransformation
 
-Updates the target table incrementally using either `delete_insert` or `merge` strategy.
+Updates the target table incrementally using the `delete_insert`, `merge`, or `append` strategy.
 
 ```python
 from sqlmat import IncrementalTableTransformation
@@ -61,7 +61,7 @@ transformation = IncrementalTableTransformation(
     target_schema="analytics",
     target_table="events",
     sql="select * from raw.events where updated_at > '2024-01-01'",
-    strategy="delete_insert",  # or "merge"
+    strategy="delete_insert",  # or "merge" or "append"
     unique_key="event_id",  # str or list[str]
 )
 ```
@@ -72,6 +72,9 @@ Implicit template parameter:
 If the target table does not exist yet, it is created from the query result. On subsequent runs, the strategy determines how rows are merged:
 - `delete_insert` - deletes matching rows by `unique_key` (with optional `incremental_predicates`), then inserts new rows
 - `merge` - uses SQL `MERGE` to upsert rows by `unique_key`
+- `append` - inserts the query result into the target (no key match, no update). Deduplication is the model's responsibility.
+
+The `append` strategy ignores `unique_key` and `incremental_predicates`, and does not require `unique_key`.
 
 ### Unload
 

@@ -86,6 +86,8 @@ class Executor:
                 self._run_delete_insert(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
             elif materialization == "merge":
                 self._run_merge(target_schema, target_table, rendered_sql, unique_key, incremental_predicates)
+            elif materialization == "append":
+                self._run_append(target_schema, target_table, rendered_sql)
             else:
                 self._run_full_refresh(target_schema, target_table, rendered_sql)
             self._emit(TransformationCompleted(target_schema, target_table, materialization))
@@ -100,6 +102,29 @@ class Executor:
         try:
             self._adapter.drop_table(target_schema, target_table)
             self._adapter.create_table_as(target_schema, target_table, rendered_sql)
+            self._adapter.commit()
+        except Exception:
+            self._adapter.rollback()
+            raise
+
+    def _run_append(self, target_schema: str, target_table: str, rendered_sql: str) -> None:
+        self._adapter.begin_transaction()
+        try:
+            if not self._adapter.table_exists(target_schema, target_table):
+                self._adapter.create_table_as(target_schema, target_table, rendered_sql)
+                self._adapter.commit()
+                return
+
+            temp_table = f"{target_table}_tmp"
+            temp_table_full = f"{target_schema}.{temp_table}"
+
+            self._adapter.drop_table(target_schema, temp_table)
+            self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
+
+            columns = self._adapter.get_columns(target_schema, target_table)
+            self._adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
+
+            self._adapter.drop_table(target_schema, temp_table)
             self._adapter.commit()
         except Exception:
             self._adapter.rollback()

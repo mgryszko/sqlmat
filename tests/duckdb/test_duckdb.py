@@ -436,6 +436,164 @@ def test_merge_without_unique_key_raises_error(adapter: DuckDBAdapter, src_table
         )
 
 
+def test_append_target_table_does_not_exist(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, src_table: Table, tgt_table: Table
+) -> None:
+    conn.execute(f"drop table if exists {tgt_table.qualified_name}")
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="append",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_append_to_existing_table(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="append",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
+def test_append_runs_twice_accumulates(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    executor = adapter.executor()
+    src_table.insert([(1, "2024-01-01", 10), (2, "2024-01-02", 20)])
+
+    transformation = IncrementalTableTransformation(
+        target_schema=tgt_table.schema,
+        target_table=tgt_table.name,
+        strategy="append",
+        sql="select user_id, event_date, event_count from {{ source_table }}",
+    )
+
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
+    executor.run(transformation, template_context={"source_table": src_table.qualified_name})
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_append_without_unique_key_succeeds(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, "2024-01-01", 10)])
+    src_table.insert([(2, "2024-01-02", 20)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="append",
+            unique_key=None,
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 20},
+        ],
+        order_by=["user_id"],
+    )
+
+
+def test_append_ignores_unique_key_and_predicates(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, src_table: Table, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, "2024-01-01", 10), (2, "2024-01-01", 20)])
+    src_table.insert([(2, "2024-01-02", 25), (3, "2024-01-03", 30)])
+
+    adapter.executor().run(
+        IncrementalTableTransformation(
+            target_schema=tgt_table.schema,
+            target_table=tgt_table.name,
+            strategy="append",
+            unique_key="user_id",
+            incremental_predicates=f"{TARGET_TABLE_ALIAS}.event_count > 15",
+            sql="select user_id, event_date, event_count from {{ source_table }}",
+        ),
+        template_context={"source_table": src_table.qualified_name},
+    )
+
+    tgt_table.assert_table_equals(
+        [
+            {"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 10},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 1), "event_count": 20},
+            {"user_id": 2, "event_date": datetime.date(2024, 1, 2), "event_count": 25},
+            {"user_id": 3, "event_date": datetime.date(2024, 1, 3), "event_count": 30},
+        ],
+        order_by=["user_id", "event_date"],
+    )
+
+
+def test_append_rollback_on_error(
+    conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
+) -> None:
+    tgt_table.insert([(1, "2024-01-01", 100)])
+
+    with pytest.raises(duckdb.CatalogException, match="nonexistent_table"):
+        adapter.executor().run(
+            IncrementalTableTransformation(
+                target_schema=tgt_table.schema,
+                target_table=tgt_table.name,
+                strategy="append",
+                sql="select * from nonexistent_table",
+            )
+        )
+
+    assert adapter.table_exists(tgt_table.schema, tgt_table.name)
+    tgt_table.assert_table_equals([{"user_id": 1, "event_date": datetime.date(2024, 1, 1), "event_count": 100}])
+    assert not adapter.table_exists(tgt_table.schema, f"{tgt_table.name}_tmp")
+
+
 def test_full_refresh_rollback_on_error(
     conn: duckdb.DuckDBPyConnection, adapter: DuckDBAdapter, registry: SchemaRegistry, tgt_table: Table
 ) -> None:
