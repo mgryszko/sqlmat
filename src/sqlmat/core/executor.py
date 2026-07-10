@@ -112,19 +112,8 @@ class Executor:
         try:
             if not self._adapter.table_exists(target_schema, target_table):
                 self._adapter.create_table_as(target_schema, target_table, rendered_sql)
-                self._adapter.commit()
-                return
-
-            temp_table = f"{target_table}_tmp"
-            temp_table_full = f"{target_schema}.{temp_table}"
-
-            self._adapter.drop_table(target_schema, temp_table)
-            self._adapter.create_table_as(target_schema, temp_table, rendered_sql)
-
-            columns = self._adapter.get_columns(target_schema, target_table)
-            self._adapter.insert_from_select(target_schema, target_table, columns, temp_table_full)
-
-            self._adapter.drop_table(target_schema, temp_table)
+            else:
+                self._adapter.insert_into(target_schema, target_table, rendered_sql)
             self._adapter.commit()
         except Exception:
             self._adapter.rollback()

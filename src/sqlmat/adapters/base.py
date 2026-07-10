@@ -67,6 +67,10 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
+    def insert_into(self, target_schema: str, target_table: str, source_sql: str) -> None:
+        pass
+
+    @abstractmethod
     def merge(
         self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:

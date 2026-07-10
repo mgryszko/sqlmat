@@ -115,6 +115,12 @@ class PostgresAdapter(Adapter):
         self._emit(RowsInserted(schema=target_schema, table=target_table, sql=insert_sql))
         self._execute(insert_sql)
 
+    def insert_into(self, target_schema: str, target_table: str, source_sql: str) -> None:
+        full_target = f"{target_schema}.{target_table}"
+        insert_sql = f"insert into {full_target} {source_sql}"
+        self._emit(RowsInserted(schema=target_schema, table=target_table, sql=insert_sql))
+        self._execute(insert_sql)
+
     def merge(
         self, target_schema: str, target_table: str, source_sql: str, unique_keys: list[str], predicates: list[str] | None = None
     ) -> None:
