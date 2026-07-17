@@ -73,9 +73,8 @@ class Table(ABC):
         order_by: list[str] | None = None,
         columns: list[str] | None = None,
     ) -> None:
-        actual = self._fetch_as_dicts(columns)
-        sort_key = self._sort_key(order_by)
-        assert sorted(actual, key=sort_key) == sorted(expected, key=sort_key)
+        actual = self.fetch_all(columns, order_by)
+        assert actual == sorted(expected, key=self._sort_key(order_by))
 
     def assert_table_contains(
         self,
@@ -83,17 +82,16 @@ class Table(ABC):
         order_by: list[str] | None = None,
         columns: list[str] | None = None,
     ) -> None:
-        actual = self._fetch_as_dicts(columns)
-        sort_key = self._sort_key(order_by)
-        actual_sorted = sorted(actual, key=sort_key)
-        for row in sorted(expected, key=sort_key):
-            assert row in actual_sorted, f"Expected row not found: {row}"
+        actual = self.fetch_all(columns, order_by)
+        for row in sorted(expected, key=self._sort_key(order_by)):
+            assert row in actual, f"Expected row not found: {row}"
 
-    def _fetch_as_dicts(self, columns: list[str] | None = None) -> list[dict[str, object]]:
+    def fetch_all(self, columns: list[str] | None = None, order_by: list[str] | None = None) -> list[dict[str, object]]:
         cols = columns if columns else [c.name for c in self._columns]
         cur = self._cursor()
         cur.execute(f"select {', '.join(cols)} from {self.qualified_name}")
-        return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+        rows = [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+        return sorted(rows, key=self._sort_key(order_by))
 
     @staticmethod
     def _sort_key(order_by: list[str] | None = None):
