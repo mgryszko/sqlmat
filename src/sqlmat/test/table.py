@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from sqlmat.paths import normalize_path
@@ -20,8 +21,8 @@ class Column:
 
 
 type ColumnEntry = tuple[str, str] | tuple[str, str, str]
-type ColumnSpec = list[ColumnEntry]
-type Row = tuple | dict[str, object]
+type ColumnSpec = Sequence[ColumnEntry]
+type Row = tuple | Mapping[str, object]
 
 
 class Table(ABC):
@@ -54,7 +55,7 @@ class Table(ABC):
         pass
 
     @abstractmethod
-    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+    def insert(self, rows: Sequence[Row], defaults: Mapping[str, object] | None = None) -> None:
         pass
 
     @abstractmethod
@@ -69,7 +70,7 @@ class Table(ABC):
 
     def assert_table_equals(
         self,
-        expected: list[dict[str, object]],
+        expected: Sequence[Mapping[str, object]],
         order_by: list[str] | None = None,
         columns: list[str] | None = None,
     ) -> None:
@@ -78,7 +79,7 @@ class Table(ABC):
 
     def assert_table_contains(
         self,
-        expected: list[dict[str, object]],
+        expected: Sequence[Mapping[str, object]],
         order_by: list[str] | None = None,
         columns: list[str] | None = None,
     ) -> None:
@@ -105,7 +106,7 @@ class DuckDBTable(Table):
         _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
-    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+    def insert(self, rows: Sequence[Row], defaults: Mapping[str, object] | None = None) -> None:
         _insert_positional_params(
             cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
@@ -124,7 +125,7 @@ class RedshiftTable(Table):
         _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
-    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+    def insert(self, rows: Sequence[Row], defaults: Mapping[str, object] | None = None) -> None:
         _insert_positional_params(
             cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
@@ -143,7 +144,7 @@ class PostgresTable(Table):
         _create_native_table(cursor=self._cursor(), table_qualified_name=self.qualified_name, columns=self._columns, registry=registry)
         return self
 
-    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+    def insert(self, rows: Sequence[Row], defaults: Mapping[str, object] | None = None) -> None:
         _insert_positional_params(
             cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
@@ -172,7 +173,7 @@ class AthenaTable(Table):
         )
         return self
 
-    def insert(self, rows: list[Row], defaults: dict[str, object] | None = None) -> None:
+    def insert(self, rows: Sequence[Row], defaults: Mapping[str, object] | None = None) -> None:
         _insert_named_params(
             cursor=self._cursor(),
             qualified_table_name=self.qualified_name,
@@ -201,8 +202,8 @@ def _create_iceberg_table(cursor, table_qualified_name: str, columns: list[Colum
 def _insert_positional_params(
     cursor,
     qualified_table_name: str,
-    rows: list[tuple | dict[str, object]],
-    defaults: dict[str, object] | None,
+    rows: Sequence[Row],
+    defaults: Mapping[str, object] | None,
     columns: list[Column],
     placeholder: str,
 ) -> None:
@@ -222,7 +223,7 @@ def _insert_positional_params(
 
 
 def _insert_named_params(
-    cursor, qualified_table_name: str, rows: list[Row], defaults: dict[str, object] | None, columns: list[Column]
+    cursor, qualified_table_name: str, rows: Sequence[Row], defaults: Mapping[str, object] | None, columns: list[Column]
 ) -> None:
     column_names = [c.name for c in columns]
     placeholders = ", ".join(c.placeholder(f"%({c.name})s") for c in columns)
