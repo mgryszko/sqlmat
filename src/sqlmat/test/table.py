@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+
+from approvaltests import Options, verify
 
 from sqlmat.paths import normalize_path
 from sqlmat.test.schema_registry import SchemaRegistry
@@ -28,7 +33,7 @@ type Row = tuple | Mapping[str, object]
 class Table(ABC):
     """Abstract base class for test table helpers.
 
-    Provides create, insert, delete, assert_table_equals, and assert_table_contains.
+    Provides create, insert, delete, fetch_all, assert_table_equals, assert_table_contains, and approve.
     Use a database-specific subclass: DuckDBTable, PostgresTable, RedshiftTable, or AthenaTable.
     """
 
@@ -86,6 +91,10 @@ class Table(ABC):
         actual = self.fetch_all(columns, order_by)
         for row in sorted(expected, key=self._sort_key(order_by)):
             assert row in actual, f"Expected row not found: {row}"
+
+    def approve(self, order_by: list[str] | None = None, columns: list[str] | None = None) -> None:
+        rows = self.fetch_all(columns, order_by)
+        verify(json.dumps(rows, indent=2, default=_to_json), options=Options().for_file.with_extension("json"))
 
     def fetch_all(self, columns: list[str] | None = None, order_by: list[str] | None = None) -> list[dict[str, object]]:
         cols = columns if columns else [c.name for c in self._columns]
@@ -184,6 +193,14 @@ class AthenaTable(Table):
 
     def _cursor(self):
         return self._conn.cursor()
+
+
+def _to_json(value: object) -> str:
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"Object of type {type(value)} is not JSON serializable")
 
 
 def _create_native_table(cursor, table_qualified_name: str, columns: list[Column], registry: SchemaRegistry) -> None:

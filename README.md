@@ -290,11 +290,11 @@ uv add sqlmat[test]
 ```
 
 This includes:
-- `approvaltests` - for approval-based assertions on exported files (parquet, CSV, JSON)
+- `approvaltests` - for approval-based assertions on exported files (parquet, CSV, JSON) and table contents
 - `fsspec` - for reading files from local or remote filesystems in approval tests
 - `polars` - for reading and comparing Parquet files in approval tests
 
-These are needed only when using `Files.approve_parquet`, `Files.approve_csv`, or `Files.approve_jsonl`.
+These are needed only when using `Files.approve_parquet`, `Files.approve_csv`, `Files.approve_jsonl`, or `Table.approve`.
 
 ### SchemaRegistry
 
@@ -325,6 +325,13 @@ with SchemaRegistry(conn) as registry:
 ```
 
 Rows can be inserted as tuples (positional) or dicts (by column name, with optional defaults).
+
+`approve` verifies the table contents against an approved JSON file instead of an inline expected list. Dates and timestamps are
+written in ISO format, decimals as strings:
+
+```python
+table.approve(order_by=["id"], columns=["id", "name"])
+```
 
 #### Column wrappers
 

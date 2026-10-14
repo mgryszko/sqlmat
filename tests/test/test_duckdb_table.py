@@ -1,4 +1,6 @@
 from collections.abc import Generator
+from datetime import date, datetime
+from decimal import Decimal
 
 import duckdb
 import pytest
@@ -155,6 +157,33 @@ def test_assert_table_contains_fails_when_row_missing(conn: duckdb.DuckDBPyConne
 
     with pytest.raises(AssertionError, match="Expected row not found"):
         table.assert_table_contains([{"id": 3, "name": "Charlie"}])
+
+
+def test_approve_serializes_dates_timestamps_and_decimals(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
+    columns = [("id", "integer"), ("paid_on", "date"), ("loaded_at", "timestamp"), ("amount", "decimal(10, 2)")]
+    table = DuckDBTable(conn, "main", "payments", columns).create(registry)
+    table.insert(
+        [
+            (2, date(2024, 1, 2), datetime(2024, 1, 2, 8, 30), Decimal("12.50")),
+            (1, date(2024, 1, 1), datetime(2024, 1, 1, 23, 59, 59), Decimal("0.10")),
+        ]
+    )
+
+    table.approve(order_by=["id"])
+
+
+def test_approve_orders_rows_by_the_given_columns(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
+    table = DuckDBTable(conn, "main", "users", [("id", "integer"), ("name", "varchar")]).create(registry)
+    table.insert([(1, "Bob"), (2, "Alice")])
+
+    table.approve(order_by=["name"])
+
+
+def test_approve_subset_of_columns(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
+    table = DuckDBTable(conn, "main", "users", [("id", "integer"), ("name", "varchar"), ("age", "integer")]).create(registry)
+    table.insert([(2, "Bob", 25), (1, "Alice", 30)])
+
+    table.approve(columns=["id", "name"], order_by=["id"])
 
 
 def test_duckdb_tx_commits_on_success(conn: duckdb.DuckDBPyConnection, registry: SchemaRegistry) -> None:
