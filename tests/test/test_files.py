@@ -109,6 +109,13 @@ def test_approve_parquet_multiple_local_files(tmp_path: pathlib.Path) -> None:
     Files(f"{tmp_path}/*.parquet").approve_parquet(sort_columns=SORT_COLUMNS)
 
 
+def test_approve_parquet_shows_every_row_column_and_character(tmp_path: pathlib.Path) -> None:
+    rows = [{**{f"column_{c}": f"row {r} {'long value ' * 5}" for c in range(10)}, "items": list(range(5))} for r in range(12)]
+    write_parquet(tmp_path / "wide.parquet", rows)
+
+    Files(tmp_path / "wide.parquet").approve_parquet()
+
+
 def test_approve_parquet_multiple_s3_files(s3_uri: str) -> None:
     write_parquet_s3(f"{s3_uri}part1.parquet", PART_1_JSON)
     write_parquet_s3(f"{s3_uri}part2.parquet", PART_2_JSON)

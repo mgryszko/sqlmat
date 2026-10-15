@@ -350,7 +350,8 @@ table.insert([{"id": 1, "payload": '{"key": "value"}'}])
 
 ### Files
 
-Approval-test helpers for verifying exported file contents:
+Approval-test helpers for verifying exported file contents. `approve_parquet` prints every row, column and character, so the approval
+covers the whole file:
 
 ```python
 from sqlmat.test import Files

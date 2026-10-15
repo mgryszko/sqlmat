@@ -23,7 +23,6 @@ class Files:
     def approve_parquet(self, scrub_columns: list[str] | None = None, sort_columns: list[str] | None = None) -> None:
         import polars as pl
 
-        pl.Config.set_tbl_width_chars(1000)
         df = pl.read_parquet(str(self.path))
         if sort_columns:
             df = df.sort(sort_columns)
@@ -35,7 +34,8 @@ class Files:
                 df = df.with_columns(pl.lit("YYYY-MM-DD HH:MM:SS").alias(column))
             else:
                 df = df.with_columns(pl.lit("SCRUBBED").alias(column))
-        verify(str(df))
+        with pl.Config(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=-1, fmt_str_lengths=1_000_000, fmt_table_cell_list_len=-1):
+            verify(str(df))
 
     def approve_jsonl(self, sort_columns: list[str] | None = None) -> None:
         received = [json.loads(line) for line in (self._read_lines())]
