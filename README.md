@@ -364,7 +364,11 @@ from sqlmat.test import Files
 Files("/path/to/output.parquet").approve_parquet(sort_columns=["id"])
 Files("s3://bucket/output/*.csv").approve_csv(header=True, sort_columns=["id"])
 Files("s3://bucket/output/*.jsonl").approve_jsonl(sort_columns=["id"])
+Files("s3://bucket/output/*.jsonl").approve_jsonl(sort_lines=True)
 ```
+
+`sort_lines=True` sorts the rows by their whole JSON line, for output where no top-level column tells rows apart.
+It cannot be combined with `sort_columns`.
 
 ### Transaction helpers
 

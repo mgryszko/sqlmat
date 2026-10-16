@@ -36,6 +36,15 @@ PART_2_JSON = [
     {"user_id": 2, "event_date": "2024-01-01", "event_count": 9},
 ]
 
+NESTED_PART_1_JSON = [
+    {"user_id": 2, "payload": {"time": "2024-01-01T10:00:00Z", "insert_id": "b"}},
+    {"user_id": 1, "payload": {"time": "2024-01-01T10:00:00Z", "insert_id": "d"}},
+]
+NESTED_PART_2_JSON = [
+    {"user_id": 1, "payload": {"time": "2024-01-01T10:00:00Z", "insert_id": "c"}},
+    {"user_id": 2, "payload": {"time": "2024-01-01T09:00:00Z", "insert_id": "a"}},
+]
+
 SORT_COLUMNS = ["user_id", "event_date"]
 
 
@@ -100,6 +109,20 @@ def test_approve_jsonl_multiple_s3_files(s3_uri: str) -> None:
     write_jsonl_s3(f"{s3_uri}part2.json", PART_2_JSON)
 
     Files(f"{s3_uri}*.json").approve_jsonl(sort_columns=SORT_COLUMNS)
+
+
+def test_approve_jsonl_sorted_by_whole_lines(tmp_path: pathlib.Path) -> None:
+    write_jsonl(tmp_path / "part1.json", NESTED_PART_1_JSON)
+    write_jsonl(tmp_path / "part2.json", NESTED_PART_2_JSON)
+
+    Files(f"{tmp_path}/*.json").approve_jsonl(sort_lines=True)
+
+
+def test_approve_jsonl_raises_when_both_sort_options_are_given(tmp_path: pathlib.Path) -> None:
+    write_jsonl(tmp_path / "part1.json", PART_1_JSON)
+
+    with pytest.raises(ValueError, match="either sort_columns or sort_lines"):
+        Files(f"{tmp_path}/*.json").approve_jsonl(sort_columns=SORT_COLUMNS, sort_lines=True)
 
 
 def test_approve_parquet_multiple_local_files(tmp_path: pathlib.Path) -> None:

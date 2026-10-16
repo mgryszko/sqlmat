@@ -37,10 +37,14 @@ class Files:
         with pl.Config(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=-1, fmt_str_lengths=1_000_000, fmt_table_cell_list_len=-1):
             verify(str(df))
 
-    def approve_jsonl(self, sort_columns: list[str] | None = None) -> None:
+    def approve_jsonl(self, sort_columns: list[str] | None = None, sort_lines: bool = False) -> None:
+        if sort_columns and sort_lines:
+            raise ValueError("Pass either sort_columns or sort_lines, not both")
         received = [json.loads(line) for line in (self._read_lines())]
         if sort_columns:
             received.sort(key=lambda row: tuple(row[col] for col in sort_columns))
+        elif sort_lines:
+            received.sort(key=json.dumps)
         normalized_received = json.dumps(received, indent=2)
 
         verify(normalized_received, options=Options().for_file.with_extension("json"))
