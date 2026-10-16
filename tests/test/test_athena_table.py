@@ -1,12 +1,14 @@
 import uuid
 from collections.abc import Generator
 
+import polars as pl
 import pyathena
 import pytest
 from env import AthenaEnv
+from fsspec import open as fsspec_open
 
 from sqlmat import normalize_path
-from sqlmat.test import AthenaTable, SchemaRegistry
+from sqlmat.test import AthenaHiveTable, AthenaTable, HiveFormat, SchemaRegistry
 
 
 @pytest.fixture(scope="module")
@@ -189,3 +191,37 @@ def test_assert_table_contains_fails_when_row_missing(
 
     with pytest.raises(AssertionError, match="Expected row not found"):
         table.assert_table_contains([{"id": 3, "name": "Charlie"}])
+
+
+@pytest.mark.parametrize("stored_as", ["parquet", "orc", "textfile"], ids=["parquet", "orc", "text file"])
+def test_hive_table_insert_and_read_back(
+    conn: pyathena.Connection, registry: SchemaRegistry, schema: str, s3_table_base_uri: str, stored_as: HiveFormat
+) -> None:
+    columns = [("id", "int"), ("name", "string")]
+    table = AthenaHiveTable(conn, schema, "users", columns, s3_table_base_uri, stored_as=stored_as).create(registry)
+
+    table.insert([(1, "Alice"), (2, "Bob")])
+
+    table.assert_table_equals(
+        [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+        order_by=["id"],
+    )
+
+
+def test_hive_table_reads_files_already_in_its_location(
+    conn: pyathena.Connection, registry: SchemaRegistry, schema: str, s3_table_base_uri: str
+) -> None:
+    rows = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+    with fsspec_open(normalize_path(f"{s3_table_base_uri}/users/part1.parquet"), "wb") as f:
+        pl.DataFrame(rows).write_parquet(f)
+
+    table = AthenaHiveTable(conn, schema, "users", [("id", "bigint"), ("name", "string")], s3_table_base_uri).create(registry)
+
+    table.assert_table_equals(rows, order_by=["id"])
+
+
+def test_hive_table_delete_raises(conn: pyathena.Connection, registry: SchemaRegistry, schema: str, s3_table_base_uri: str) -> None:
+    table = AthenaHiveTable(conn, schema, "users", [("id", "int")], s3_table_base_uri).create(registry)
+
+    with pytest.raises(NotImplementedError, match="Hive"):
+        table.delete()

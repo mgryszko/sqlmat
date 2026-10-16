@@ -311,7 +311,7 @@ with SchemaRegistry(conn) as registry:
 
 ### Table
 
-Provides helpers for creating tables, inserting rows, and asserting on table contents. Database-specific subclasses: `DuckDBTable`, `PostgresTable`, `RedshiftTable`, `AthenaTable`.
+Provides helpers for creating tables, inserting rows, and asserting on table contents. Database-specific subclasses: `DuckDBTable`, `PostgresTable`, `RedshiftTable`, `AthenaTable`, `AthenaHiveTable`.
 
 ```python
 from sqlmat.test import DuckDBTable, SchemaRegistry
@@ -325,6 +325,11 @@ with SchemaRegistry(conn) as registry:
 ```
 
 Rows can be inserted as tuples (positional) or dicts (by column name, with optional defaults).
+
+`AthenaTable` creates an Iceberg table, `AthenaHiveTable` a Hive external table,
+with `stored_as` picking the format (`parquet`, `orc` or `textfile`).
+Dropping a Hive table leaves its S3 files, so give it a unique `s3_table_base_uri`.
+Its `delete` raises `NotImplementedError`.
 
 `approve` verifies the table contents against an approved JSON file instead of an inline expected list. Dates and timestamps are
 written in ISO format, decimals as strings:

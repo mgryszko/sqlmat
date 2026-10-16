@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from approvaltests import Options, verify
 
@@ -28,13 +29,14 @@ class Column:
 type ColumnEntry = tuple[str, str] | tuple[str, str, str]
 type ColumnSpec = Sequence[ColumnEntry]
 type Row = tuple | Mapping[str, object]
+type HiveFormat = Literal["parquet", "orc", "textfile"]
 
 
 class Table(ABC):
     """Abstract base class for test table helpers.
 
     Provides create, insert, delete, fetch_all, assert_table_equals, assert_table_contains, and approve.
-    Use a database-specific subclass: DuckDBTable, PostgresTable, RedshiftTable, or AthenaTable.
+    Use a database-specific subclass: DuckDBTable, PostgresTable, RedshiftTable, AthenaTable, or AthenaHiveTable.
     """
 
     def __init__(self, conn, schema: str, name: str, columns: ColumnSpec):
@@ -177,7 +179,7 @@ class AthenaTable(Table):
             cursor=self._cursor(),
             table_qualified_name=self.qualified_name,
             columns=self._columns,
-            location=normalize_path(f"{self._s3_table_base_uri}/{self._name}/"),
+            location=self._location(),
             registry=registry,
         )
         return self
@@ -193,6 +195,29 @@ class AthenaTable(Table):
 
     def _cursor(self):
         return self._conn.cursor()
+
+    def _location(self) -> str:
+        return normalize_path(f"{self._s3_table_base_uri}/{self._name}/")
+
+
+class AthenaHiveTable(AthenaTable):
+    def __init__(self, conn, schema: str, name: str, columns: ColumnSpec, s3_table_base_uri: str, stored_as: HiveFormat = "parquet"):
+        super().__init__(conn, schema, name, columns, s3_table_base_uri)
+        self._stored_as = stored_as
+
+    def create(self, registry: SchemaRegistry) -> AthenaHiveTable:
+        _create_hive_table(
+            cursor=self._cursor(),
+            table_qualified_name=self.qualified_name,
+            columns=self._columns,
+            stored_as=self._stored_as,
+            location=self._location(),
+            registry=registry,
+        )
+        return self
+
+    def delete(self, where: str | None = None) -> None:
+        raise NotImplementedError("Athena cannot delete rows from a Hive table")
 
 
 def _to_json(value: object) -> str:
@@ -213,6 +238,14 @@ def _create_iceberg_table(cursor, table_qualified_name: str, columns: list[Colum
     cols = ", ".join(f"{c.name} {c.type}" for c in columns)
     sql = f"create table {table_qualified_name} ({cols}) location '{location}' tblproperties ('table_type' = 'ICEBERG')"
     cursor.execute(sql)
+    registry.register(table_qualified_name)
+
+
+def _create_hive_table(
+    cursor, table_qualified_name: str, columns: list[Column], stored_as: HiveFormat, location: str, registry: SchemaRegistry
+) -> None:
+    cols = ", ".join(f"`{c.name}` {c.type}" for c in columns)
+    cursor.execute(f"create external table {table_qualified_name} ({cols}) stored as {stored_as} location '{location}'")
     registry.register(table_qualified_name)
 
 
